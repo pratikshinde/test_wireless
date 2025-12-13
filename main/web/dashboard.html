@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoRa Mesh - Dashboard</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="nav-brand">
+                <i class="fas fa-satellite-dish"></i>
+                <span>LoRa Mesh Network</span>
+            </div>
+            <div class="nav-menu">
+                <a href="/" class="nav-link active"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="/config" class="nav-link"><i class="fas fa-cog"></i> LoRa Config</a>
+                <a href="/devices" class="nav-link"><i class="fas fa-network-wired"></i> Devices</a>
+            </div>
+            <div class="nav-status">
+                <span class="status-indicator online"></span>
+                <span>Node <span id="nodeId">1</span></span>
+            </div>
+        </nav>
+
+        <!-- Dashboard Content -->
+        <div class="dashboard">
+            <!-- Network Overview -->
+            <div class="card full-width">
+                <h2><i class="fas fa-globe"></i> Network Overview</h2>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #4CAF50;">
+                            <i class="fas fa-satellite"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="nodeCount">1</h3>
+                            <p>Online Nodes</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #2196F3;">
+                            <i class="fas fa-signal"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="avgRssi">0</h3>
+                            <p>Avg RSSI (dBm)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #FF9800;">
+                            <i class="fas fa-route"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="routeCount">0</h3>
+                            <p>Active Routes</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: #9C27B0;">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="uptime">0</h3>
+                            <p>Uptime (hours)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="card">
+                <h2><i class="fas fa-history"></i> Recent Activity</h2>
+                <div class="activity-list" id="activityList">
+                    <div class="activity-item">
+                        <div class="activity-icon tx">
+                            <i class="fas fa-paper-plane"></i>
+                        </div>
+                        <div class="activity-details">
+                            <p>Sent ping to all nodes</p>
+                            <span class="activity-time">2 minutes ago</span>
+                        </div>
+                    </div>
+                    <div class="activity-item">
+                        <div class="activity-icon rx">
+                            <i class="fas fa-broadcast-tower"></i>
+                        </div>
+                        <div class="activity-details">
+                            <p>Received beacon from Node 2</p>
+                            <span class="activity-time">5 minutes ago</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card">
+                <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
+                <div class="action-grid">
+                    <button class="action-btn" onclick="sendPing()">
+                        <i class="fas fa-bullhorn"></i>
+                        <span>Send Ping</span>
+                    </button>
+                    <button class="action-btn" onclick="discoverNodes()">
+                        <i class="fas fa-search"></i>
+                        <span>Discover Nodes</span>
+                    </button>
+                    <button class="action-btn" onclick="refreshNetwork()">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Refresh Network</span>
+                    </button>
+                    <button class="action-btn" onclick="showConfig()">
+                        <i class="fas fa-sliders-h"></i>
+                        <span>Quick Config</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Network Health -->
+            <div class="card full-width">
+                <h2><i class="fas fa-heartbeat"></i> Network Health</h2>
+                <div class="health-grid">
+                    <div class="health-item">
+                        <h3>Connectivity</h3>
+                        <div class="health-bar">
+                            <div class="health-fill" style="width: 95%"></div>
+                        </div>
+                        <span>95%</span>
+                    </div>
+                    <div class="health-item">
+                        <h3>Signal Quality</h3>
+                        <div class="health-bar">
+                            <div class="health-fill" style="width: 80%"></div>
+                        </div>
+                        <span>80%</span>
+                    </div>
+                    <div class="health-item">
+                        <h3>Route Stability</h3>
+                        <div class="health-bar">
+                            <div class="health-fill" style="width: 90%"></div>
+                        </div>
+                        <span>90%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/script.js"></script>
+    <script>
+        // Dashboard specific functions
+        async function updateDashboard() {
+            try {
+                // Update node count
+                const nodesRes = await fetch('/api/nodes');
+                const nodes = await nodesRes.json();
+                document.getElementById('nodeCount').textContent = nodes.length;
+                
+                // Calculate average RSSI
+                let totalRssi = 0;
+                let count = 0;
+                nodes.forEach(node => {
+                    if (node.online && node.rssi !== 0) {
+                        totalRssi += node.rssi;
+                        count++;
+                    }
+                });
+                document.getElementById('avgRssi').textContent = count > 0 ? Math.round(totalRssi / count) : 0;
+                
+                // Update route count
+                const routesRes = await fetch('/api/routes');
+                const routes = await routesRes.json();
+                let activeRoutes = routes.filter(route => route.active).length;
+                document.getElementById('routeCount').textContent = activeRoutes;
+                
+                // Update uptime (example)
+                document.getElementById('uptime').textContent = "24";
+                
+            } catch (error) {
+                console.error('Error updating dashboard:', error);
+            }
+        }
+        
+        function sendPing() {
+            fetch('/api/ping', { method: 'POST' })
+                .then(response => {
+                    addActivity('Sent ping to all nodes', 'tx');
+                })
+                .catch(error => {
+                    console.error('Error sending ping:', error);
+                });
+        }
+        
+        function discoverNodes() {
+            fetch('/api/discover', { method: 'POST' })
+                .then(response => {
+                    addActivity('Initiating node discovery', 'tx');
+                })
+                .catch(error => {
+                    console.error('Error discovering nodes:', error);
+                });
+        }
+        
+        function refreshNetwork() {
+            updateDashboard();
+            addActivity('Network data refreshed', 'info');
+        }
+        
+        function showConfig() {
+            window.location.href = '/config';
+        }
+        
+        function addActivity(message, type) {
+            const activityList = document.getElementById('activityList');
+            const activityItem = document.createElement('div');
+            activityItem.className = 'activity-item';
+            
+            const iconClass = type === 'tx' ? 'fas fa-paper-plane' : 
+                             type === 'rx' ? 'fas fa-broadcast-tower' : 
+                             'fas fa-info-circle';
+            const iconColor = type === 'tx' ? 'tx' : 
+                             type === 'rx' ? 'rx' : 'info';
+            
+            activityItem.innerHTML = `
+                <div class="activity-icon ${iconColor}">
+                    <i class="${iconClass}"></i>
+                </div>
+                <div class="activity-details">
+                    <p>${message}</p>
+                    <span class="activity-time">Just now</span>
+                </div>
+            `;
+            
+            activityList.prepend(activityItem);
+            
+            // Keep only last 10 activities
+            while (activityList.children.length > 10) {
+                activityList.removeChild(activityList.lastChild);
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDashboard();
+            // Update every 10 seconds
+            setInterval(updateDashboard, 10000);
+        });
+    </script>
+</body>
+</html>

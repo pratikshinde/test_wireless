@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Devices</title>
+    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Navigation -->
+        <nav class="navbar">
+            <div class="nav-brand">
+                <i class="fas fa-satellite-dish"></i>
+                <span>LoRa Mesh Network</span>
+            </div>
+            <div class="nav-menu">
+                <a href="/" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
+                <a href="/config" class="nav-link"><i class="fas fa-cog"></i> LoRa Config</a>
+                <a href="/devices" class="nav-link active"><i class="fas fa-network-wired"></i> Devices</a>
+            </div>
+            <div class="nav-status">
+                <span class="status-indicator online"></span>
+                <span>Node <span id="nodeId">1</span></span>
+            </div>
+        </nav>
+
+        <!-- Devices Content -->
+        <div class="devices-container">
+            <div class="devices-header">
+                <h1><i class="fas fa-network-wired"></i> Network Devices</h1>
+                <button class="btn btn-primary" onclick="refreshDevices()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+
+            <!-- Devices List -->
+            <div class="devices-list" id="devicesList">
+                <!-- Devices will be loaded here -->
+            </div>
+
+            <!-- Routing Table -->
+            <div class="routing-table">
+                <h2><i class="fas fa-route"></i> Routing Table</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Destination</th>
+                            <th>Next Hop</th>
+                            <th>Hops</th>
+                            <th>Link Quality</th>
+                            <th>Last Update</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="routingTableBody">
+                        <!-- Routes will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Node Details Modal -->
+            <div id="nodeModal" class="modal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Node Details</h2>
+                        <span class="close" onclick="closeModal()">&times;</span>
+                    </div>
+                    <div class="modal-body" id="nodeDetails">
+                        <!-- Node details will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/script.js"></script>
+    <script>
+        // Load devices and routes
+        async function loadDevices() {
+            try {
+                // Load nodes
+                const nodesRes = await fetch('/api/nodes');
+                const nodes = await nodesRes.json();
+                
+                const devicesList = document.getElementById('devicesList');
+                devicesList.innerHTML = '';
+                
+                nodes.forEach(node => {
+                    const deviceCard = document.createElement('div');
+                    deviceCard.className = `device-card ${node.id === 1 ? 'master' : ''} ${!node.online ? 'offline' : ''}`;
+                    
+                    const timeAgo = Math.floor((Date.now()/1000 - node.last_seen/1000));
+                    
+                    deviceCard.innerHTML = `
+                        <div class="device-icon">
+                            <i class="fas ${node.id === 1 ? 'fa-crown' : 'fa-microchip'}"></i>
+                        </div>
+                        <div class="device-info">
+                            <h3>${node.name}</h3>
+                            <p>ID: ${node.id} ${node.id === 1 ? '(Master)' : '(Slave)'}</p>
+                            <div class="device-stats">
+                                <span class="stat"><i class="fas fa-signal"></i> ${node.rssi} dBm</span>
+                                <span class="stat"><i class="fas fa-route"></i> ${node.hop_count} hops</span>
+                                <span class="stat"><i class="fas fa-clock"></i> ${timeAgo}s ago</span>
+                            </div>
+                        </div>
+                        <div class="device-status">
+                            <span class="status-indicator ${node.online ? 'online' : 'offline'}"></span>
+                            <span>${node.online ? 'Online' : 'Offline'}</span>
+                        </div>
+                    `;
+                    
+                    deviceCard.onclick = () => showNodeDetails(node);
+                    devicesList.appendChild(deviceCard);
+                });
+                
+                // Load routes
+                const routesRes = await fetch('/api/routes');
+                const routes = await routesRes.json();
+                
+                const tableBody = document.getElementById('routingTableBody');
+                tableBody.innerHTML = '';
+                
+                routes.forEach(route => {
+                    const row = tableBody.insertRow();
+                    const timeAgo = Math.floor((Date.now()/1000 - route.last_update/1000));
+                    
+                    row.innerHTML = `
+                        <td>${route.destination}</td>
+                        <td>${route.next_hop}</td>
+                        <td>${route.hop_count}</td>
+                        <td>
+                            <div class="quality-bar">
+                                <div class="quality-fill" style="width: ${Math.min(100, (route.link_quality + 130) * 2)}%"></div>
+                            </div>
+                            ${route.link_quality} dBm
+                        </td>
+                        <td>${timeAgo}s ago</td>
+                        <td>
+                            <span class="status-badge ${route.active ? 'active' : 'inactive'}">
+                                ${route.active ? 'Active' : 'Inactive'}
+                            </span>
+                        </td>
+                    `;
+                });
+                
+            } catch (error) {
+                console.error('Error loading devices:', error);
+            }
+        }
+        
+        // Show node details modal
+        function showNodeDetails(node) {
+            const modal = document.getElementById('nodeModal');
+            const details = document.getElementById('nodeDetails');
+            
+            const timeAgo = Math.floor((Date.now()/1000 - node.last_seen/1000));
+            const uptimeHours = Math.floor(node.uptime / 3600);
+            const uptimeMinutes = Math.floor((node.uptime % 3600) / 60);
+            
+            details.innerHTML = `
+                <div class="node-detail-section">
+                    <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+                    <p><strong>Node ID:</strong> ${node.id}</p>
+                    <p><strong>Name:</strong> ${node.name}</p>
+                    <p><strong>Role:</strong> ${node.id === 1 ? 'Master' : 'Slave'}</p>
+                    <p><strong>Status:</strong> <span class="status-badge ${node.online ? 'active' : 'inactive'}">
+                        ${node.online ? 'Online' : 'Offline'}
+                    </span></p>
+                </div>
+                
+                <div class="node-detail-section">
+                    <h3><i class="fas fa-chart-line"></i> Performance Metrics</h3>
+                    <p><strong>RSSI:</strong> ${node.rssi} dBm</p>
+                    <p><strong>Hop Count:</strong> ${node.hop_count}</p>
+                    <p><strong>Last Seen:</strong> ${timeAgo} seconds ago</p>
+                    <p><strong>Uptime:</strong> ${uptimeHours}h ${uptimeMinutes}m</p>
+                </div>
+                
+                <div class="node-detail-section">
+                    <h3><i class="fas fa-cogs"></i> Actions</h3>
+                    <div class="action-buttons">
+                        <button class="btn btn-small" onclick="pingNode(${node.id})">
+                            <i class="fas fa-bullhorn"></i> Ping Node
+                        </button>
+                        <button class="btn btn-small" onclick="sendMessage(${node.id})">
+                            <i class="fas fa-envelope"></i> Send Message
+                        </button>
+                        ${node.id !== 1 ? `
+                            <button class="btn btn-small btn-danger" onclick="removeNode(${node.id})">
+                                <i class="fas fa-trash"></i> Remove Node
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+            
+            modal.style.display = 'block';
+        }
+        
+        // Close modal
+        function closeModal() {
+            document.getElementById('nodeModal').style.display = 'none';
+        }
+        
+        // Refresh devices
+        function refreshDevices() {
+            loadDevices();
+        }
+        
+        // Ping specific node
+        function pingNode(nodeId) {
+            fetch(`/api/ping/${nodeId}`, {method: 'POST'})
+                .then(() => {
+                    alert(`Ping sent to Node ${nodeId}`);
+                    closeModal();
+                })
+                .catch(error => {
+                    console.error('Error pinging node:', error);
+                    alert('Error pinging node');
+                });
+        }
+        
+        // Send message to node
+        function sendMessage(nodeId) {
+            const message = prompt('Enter message to send:');
+            if (message) {
+                fetch('/api/message', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({to: nodeId, message: message})
+                })
+                .then(() => {
+                    alert(`Message sent to Node ${nodeId}`);
+                    closeModal();
+                })
+                .catch(error => {
+                    console.error('Error sending message:', error);
+                    alert('Error sending message');
+                });
+            }
+        }
+        
+        // Remove node
+        function removeNode(nodeId) {
+            if (confirm(`Are you sure you want to remove Node ${nodeId}?`)) {
+                fetch(`/api/nodes/${nodeId}`, {method: 'DELETE'})
+                    .then(() => {
+                        alert(`Node ${nodeId} removed`);
+                        closeModal();
+                        loadDevices();
+                    })
+                    .catch(error => {
+                        console.error('Error removing node:', error);
+                        alert('Error removing node');
+                    });
+            }
+        }
+        
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadDevices();
+            // Refresh every 30 seconds
+            setInterval(loadDevices, 30000);
+        });
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('nodeModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        };
+    </script>
+</body>
+</html>
