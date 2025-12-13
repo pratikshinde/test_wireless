@@ -117,4 +117,12 @@ int64_t get_time_ms(void);          // Get current time in milliseconds
 int64_t get_time_sec(void);         // Get current time in seconds
 bool is_timeout_expired(int64_t start_time, uint32_t timeout_ms);
 
+// Additional Helper Functions
+void mesh_update_self_uptime(void);  // Add this line
+void mesh_print_nodes(void);
+void mesh_print_routes(void);
+void mesh_get_statistics(uint8_t *total_nodes, uint8_t *online_nodes, 
+                         uint8_t *total_routes, uint8_t *active_routes);
+// Also add this to config_manager.h:
+void debug_nvs_content(void);
 #endif // CONFIG_MANAGER_H

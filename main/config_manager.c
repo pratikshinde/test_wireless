@@ -3,7 +3,7 @@
 #include "nvs.h"
 #include "esp_random.h"
 #include <string.h>
-
+#include "esp_timer.h"
 static const char *TAG = "CONFIG";
 static const char *NVS_NAMESPACE = "lora_mesh";
 
@@ -15,6 +15,10 @@ static route_info_t g_routes[20];    // Maximum 20 routes
 static uint8_t g_route_count = 0;
 
 static lora_config_t *g_current_config = NULL;
+
+// ==================== FORWARD DECLARATIONS ====================
+// Add this section to declare functions that are called before they're defined
+static void mesh_remove_routes_via_node(uint8_t node_id);
 
 // ==================== CONFIGURATION MANAGEMENT ====================
 
@@ -76,6 +80,216 @@ void config_load_defaults(lora_config_t *config) {
     
     g_current_config = config;
 }
+// Debug function to print all NVS content
+void debug_nvs_content(void) {
+    nvs_handle_t handle;
+    esp_err_t err;
+    
+    ESP_LOGI(TAG, "=== NVS DEBUG DUMP ===");
+    
+    err = nvs_open(NVS_NAMESPACE, NVS_READONLY, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(err));
+        return;
+    }
+    
+    // 1. Print all keys with their types and values
+    ESP_LOGI(TAG, "--- All Keys in NVS ---");
+    
+    // Node Identity
+    uint8_t node_id = 0;
+    err = nvs_get_u8(handle, "node_id", &node_id);
+    ESP_LOGI(TAG, "node_id: %s = %u", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", node_id);
+    
+    char node_name[32] = {0};
+    size_t len = sizeof(node_name);
+    err = nvs_get_str(handle, "node_name", node_name, &len);
+    ESP_LOGI(TAG, "node_name: %s = '%s'", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", node_name);
+    
+    // LoRa Parameters
+    uint32_t frequency = 0;
+    err = nvs_get_u32(handle, "frequency", &frequency);
+    ESP_LOGI(TAG, "frequency: %s = %lu Hz (%.1f MHz)", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             frequency, frequency / 1000000.0);
+    
+    uint8_t spreading_factor = 0;
+    err = nvs_get_u8(handle, "spreading_factor", &spreading_factor);
+    ESP_LOGI(TAG, "spreading_factor: %s = %u", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", spreading_factor);
+    
+    uint32_t bandwidth = 0;
+    err = nvs_get_u32(handle, "bandwidth", &bandwidth);
+    ESP_LOGI(TAG, "bandwidth: %s = %lu Hz", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", bandwidth);
+    
+    uint8_t coding_rate = 0;
+    err = nvs_get_u8(handle, "coding_rate", &coding_rate);
+    ESP_LOGI(TAG, "coding_rate: %s = %u (4/%u)", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", coding_rate, coding_rate);
+    
+    int8_t tx_power = 0;
+    err = nvs_get_i8(handle, "tx_power", &tx_power);
+    ESP_LOGI(TAG, "tx_power: %s = %d dBm", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", tx_power);
+    
+    uint8_t sync_word = 0;
+    err = nvs_get_u8(handle, "sync_word", &sync_word);
+    ESP_LOGI(TAG, "sync_word: %s = 0x%02X", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", sync_word);
+    
+    // Network Parameters
+    uint16_t ping_interval = 0;
+    err = nvs_get_u16(handle, "ping_interval", &ping_interval);
+    ESP_LOGI(TAG, "ping_interval: %s = %u seconds", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", ping_interval);
+    
+    uint16_t beacon_interval = 0;
+    err = nvs_get_u16(handle, "beacon_interval", &beacon_interval);
+    ESP_LOGI(TAG, "beacon_interval: %s = %u seconds", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", beacon_interval);
+    
+    uint16_t route_timeout = 0;
+    err = nvs_get_u16(handle, "route_timeout", &route_timeout);
+    ESP_LOGI(TAG, "route_timeout: %s = %u seconds", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", route_timeout);
+    
+    uint8_t max_hops = 0;
+    err = nvs_get_u8(handle, "max_hops", &max_hops);
+    ESP_LOGI(TAG, "max_hops: %s = %u", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", max_hops);
+    
+    uint8_t enable_ack = 0;
+    err = nvs_get_u8(handle, "enable_ack", &enable_ack);
+    ESP_LOGI(TAG, "enable_ack: %s = %s", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             enable_ack ? "true" : "false");
+    
+    uint16_t ack_timeout = 0;
+    err = nvs_get_u16(handle, "ack_timeout", &ack_timeout);
+    ESP_LOGI(TAG, "ack_timeout: %s = %u ms", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", ack_timeout);
+    
+    // Mesh Parameters
+    uint8_t enable_self_healing = 0;
+    err = nvs_get_u8(handle, "enable_self_healing", &enable_self_healing);
+    ESP_LOGI(TAG, "enable_self_healing: %s = %s", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             enable_self_healing ? "true" : "false");
+    
+    uint16_t healing_timeout = 0;
+    err = nvs_get_u16(handle, "healing_timeout", &healing_timeout);
+    ESP_LOGI(TAG, "healing_timeout: %s = %u seconds", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", healing_timeout);
+    
+    // WiFi AP Parameters
+    char wifi_ssid[32] = {0};
+    len = sizeof(wifi_ssid);
+    err = nvs_get_str(handle, "wifi_ssid", wifi_ssid, &len);
+    ESP_LOGI(TAG, "wifi_ssid: %s = '%s'", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", wifi_ssid);
+    
+    char wifi_password[32] = {0};
+    len = sizeof(wifi_password);
+    err = nvs_get_str(handle, "wifi_password", wifi_password, &len);
+    ESP_LOGI(TAG, "wifi_password: %s = '%s'", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             err == ESP_OK ? (strlen(wifi_password) > 0 ? "***SET***" : "empty") : "NOT FOUND");
+    
+    // Web Server
+    uint8_t enable_web_server = 0;
+    err = nvs_get_u8(handle, "enable_web_server", &enable_web_server);
+    ESP_LOGI(TAG, "enable_web_server: %s = %s", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             enable_web_server ? "true" : "false");
+    
+    uint16_t web_port = 0;
+    err = nvs_get_u16(handle, "web_port", &web_port);
+    ESP_LOGI(TAG, "web_port: %s = %u", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", web_port);
+    
+    // Encryption - CRITICAL FOR DEBUGGING
+    uint8_t enable_encryption = 0;
+    err = nvs_get_u8(handle, "enable_encryption", &enable_encryption);
+    ESP_LOGI(TAG, "enable_encryption: %s = %s", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             enable_encryption ? "true" : "false");
+    
+    uint8_t aes_key[16] = {0};
+    len = sizeof(aes_key);
+    err = nvs_get_blob(handle, "aes_key", aes_key, &len);
+    ESP_LOGI(TAG, "aes_key: %s (len: %d)", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", len);
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "  Key hex: %02X%02X%02X%02X...%02X%02X%02X%02X",
+                aes_key[0], aes_key[1], aes_key[2], aes_key[3],
+                aes_key[12], aes_key[13], aes_key[14], aes_key[15]);
+    }
+    
+    uint8_t iv[16] = {0};
+    len = sizeof(iv);
+    err = nvs_get_blob(handle, "iv", iv, &len);
+    ESP_LOGI(TAG, "iv: %s (len: %d)", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", len);
+    
+    // Advanced LoRa Parameters
+    uint8_t enable_crc = 0;
+    err = nvs_get_u8(handle, "enable_crc", &enable_crc);
+    ESP_LOGI(TAG, "enable_crc: %s = %s", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             enable_crc ? "true" : "false");
+    
+    uint8_t enable_ldro = 0;
+    err = nvs_get_u8(handle, "enable_ldro", &enable_ldro);
+    ESP_LOGI(TAG, "enable_ldro: %s = %s", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", 
+             enable_ldro ? "true" : "false");
+    
+    uint16_t preamble_length = 0;
+    err = nvs_get_u16(handle, "preamble_length", &preamble_length);
+    ESP_LOGI(TAG, "preamble_length: %s = %u", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", preamble_length);
+    
+    uint16_t symbol_timeout = 0;
+    err = nvs_get_u16(handle, "symbol_timeout", &symbol_timeout);
+    ESP_LOGI(TAG, "symbol_timeout: %s = %u", 
+             err == ESP_OK ? "FOUND" : "NOT FOUND", symbol_timeout);
+    
+    // 2. List all keys in NVS (iterate through)
+    ESP_LOGI(TAG, "--- Listing All Keys ---");
+    nvs_iterator_t it = NULL;
+    esp_err_t res = nvs_entry_find(NVS_DEFAULT_PART_NAME, NVS_NAMESPACE, NVS_TYPE_ANY, &it);
+    
+    int key_count = 0;
+    while (res == ESP_OK) {
+        nvs_entry_info_t info;
+        nvs_entry_info(it, &info);
+        
+        ESP_LOGI(TAG, "Key #%d: '%s', Type: %s, Size: %d", 
+                 ++key_count, 
+                 info.key,
+                 info.type == NVS_TYPE_U8 ? "uint8" :
+                 info.type == NVS_TYPE_I8 ? "int8" :
+                 info.type == NVS_TYPE_U16 ? "uint16" :
+                 info.type == NVS_TYPE_I16 ? "int16" :
+                 info.type == NVS_TYPE_U32 ? "uint32" :
+                 info.type == NVS_TYPE_I32 ? "int32" :
+                 info.type == NVS_TYPE_STR ? "string" :
+                 info.type == NVS_TYPE_BLOB ? "blob" : "unknown"
+                 );
+        
+        res = nvs_entry_next(&it);
+    }
+    nvs_release_iterator(it);
+    
+    ESP_LOGI(TAG, "Total keys found: %d", key_count);
+    ESP_LOGI(TAG, "=== END NVS DEBUG ===");
+    
+    nvs_close(handle);
+}
+
 
 // Save configuration to NVS
 bool config_save(lora_config_t *config) {
@@ -155,7 +369,11 @@ bool config_load(lora_config_t *config) {
     nvs_get_str(handle, "node_name", config->node_name, &len);
     
     nvs_get_u32(handle, "frequency", &config->frequency);
-    nvs_get_u8(handle, "spreading_factor", &config->spreading_factor);
+    err = nvs_get_u8(handle, "spreading_factor", &config->spreading_factor);
+    if (err != ESP_OK) {
+        config->spreading_factor = 7;  // Default if not found
+        ESP_LOGW(TAG, "SF not found in NVS, using default SF7");
+    }
     nvs_get_u32(handle, "bandwidth", &config->bandwidth);
     nvs_get_u8(handle, "coding_rate", &config->coding_rate);
     nvs_get_i8(handle, "tx_power", &config->tx_power);
@@ -183,8 +401,12 @@ bool config_load(lora_config_t *config) {
     nvs_get_blob(handle, "aes_key", config->aes_key, &len);
     len = 16;
     nvs_get_blob(handle, "iv", config->iv, &len);
-    nvs_get_u8(handle, "enable_encryption", (uint8_t*)&config->enable_encryption);
-    
+    //nvs_get_u8(handle, "enable_encryption", (uint8_t*)&config->enable_encryption);
+    err = nvs_get_u8(handle, "enable_encryption", (uint8_t*)&config->enable_encryption);
+    if (err != ESP_OK) 
+    {
+        config->enable_encryption = true;  // Default to enabled
+    }
     nvs_get_u8(handle, "enable_crc", (uint8_t*)&config->enable_crc);
     nvs_get_u8(handle, "enable_ldro", (uint8_t*)&config->enable_ldro);
     nvs_get_u16(handle, "preamble_length", &config->preamble_length);
@@ -220,9 +442,9 @@ void config_print(const lora_config_t *config) {
              config->enable_ldro ? "Enabled" : "Disabled");
 }
 
-// Validate configuration
+// Validate configuration - FIXED VERSION
 bool config_validate(const lora_config_t *config) {
-    if (config->node_id == 0 || config->node_id > 255) {
+    if (config->node_id == 0) {  // Removed the > 255 check since uint8_t can't be > 255
         ESP_LOGE(TAG, "Invalid node ID: %d", config->node_id);
         return false;
     }
@@ -478,8 +700,8 @@ void mesh_remove_route(uint8_t dest) {
     }
 }
 
-// Remove routes via specific node
-void mesh_remove_routes_via_node(uint8_t node_id) {
+// Remove routes via specific node - FIXED: Now properly declared
+static void mesh_remove_routes_via_node(uint8_t node_id) {
     for (int i = 0; i < g_route_count; i++) {
         if (g_routes[i].next_hop == node_id) {
             ESP_LOGW(TAG, "Removing route to %d via offline node %d", 
@@ -532,27 +754,7 @@ void mesh_check_route_timeouts(void) {
     }
 }
 
-// Self-healing check
-void mesh_self_healing_check(void) {
-    if (!g_current_config || !g_current_config->enable_self_healing) return;
-    
-    ESP_LOGI(TAG, "Running self-healing check");
-    
-    // Check for offline nodes
-    mesh_clear_offline_nodes(g_current_config->route_timeout);
-    
-    // Check for expired routes
-    mesh_clear_expired_routes(g_current_config->route_timeout);
-    
-    // Attempt to find alternative routes for offline nodes
-    for (int i = 0; i < g_node_count; i++) {
-        if (!g_nodes[i].online && g_nodes[i].id != g_current_config->node_id) {
-            ESP_LOGW(TAG, "Node %d is offline, attempting to find alternative route", 
-                    g_nodes[i].id);
-            // Here you would initiate route discovery
-        }
-    }
-}
+
 
 // Check if node is reachable
 bool mesh_is_node_reachable(uint8_t node_id) {

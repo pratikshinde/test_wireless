@@ -3,7 +3,8 @@
 #include "esp_log.h"
 #include "cJSON.h"
 #include <string.h>
-
+#include "esp_timer.h"
+#include "lora_mesh.h"
 static const char *TAG = "WEB_SERVER";
 static httpd_handle_t server = NULL;
 static lora_config_t *web_config;
@@ -111,12 +112,34 @@ static esp_err_t api_config_get_handler(httpd_req_t *req) {
     free((void*)json_str);
     return ESP_OK;
 }
-
+static esp_err_t api_debug_nvs_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "API: Debug NVS request");
+    
+    // Create response
+    cJSON *response = cJSON_CreateObject();
+    
+    // Call debug function (it will log to serial)
+    debug_nvs_content();
+    
+    cJSON_AddBoolToObject(response, "success", true);
+    cJSON_AddStringToObject(response, "message", "NVS debug printed to serial console");
+    
+    const char *json_str = cJSON_Print(response);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_str, strlen(json_str));
+    
+    cJSON_Delete(response);
+    free((void*)json_str);
+    
+    return ESP_OK;
+}
 static esp_err_t api_config_post_handler(httpd_req_t *req) {
     char buf[1024];
     int ret = httpd_req_recv(req, buf, sizeof(buf)-1);
     if (ret <= 0) return ESP_FAIL;
     buf[ret] = '\0';
+    
+    ESP_LOGI(TAG, "API Config POST received: %s", buf);
     
     cJSON *root = cJSON_Parse(buf);
     if (!root) {
@@ -124,41 +147,134 @@ static esp_err_t api_config_post_handler(httpd_req_t *req) {
         return ESP_FAIL;
     }
     
-    // Update configuration from JSON
+    // Update configuration from JSON - ADD ALL MISSING FIELDS
     cJSON *item;
-    if ((item = cJSON_GetObjectItem(root, "node_id"))) web_config->node_id = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "node_name"))) strncpy(web_config->node_name, item->valuestring, sizeof(web_config->node_name)-1);
-    if ((item = cJSON_GetObjectItem(root, "frequency"))) web_config->frequency = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "spreading_factor"))) web_config->spreading_factor = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "bandwidth"))) web_config->bandwidth = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "coding_rate"))) web_config->coding_rate = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "tx_power"))) web_config->tx_power = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "sync_word"))) web_config->sync_word = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "ping_interval"))) web_config->ping_interval = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "beacon_interval"))) web_config->beacon_interval = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "route_timeout"))) web_config->route_timeout = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "max_hops"))) web_config->max_hops = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "enable_ack"))) web_config->enable_ack = cJSON_IsTrue(item);
-    if ((item = cJSON_GetObjectItem(root, "ack_timeout"))) web_config->ack_timeout = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "enable_self_healing"))) web_config->enable_self_healing = cJSON_IsTrue(item);
-    if ((item = cJSON_GetObjectItem(root, "healing_timeout"))) web_config->healing_timeout = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "enable_encryption"))) web_config->enable_encryption = cJSON_IsTrue(item);
-    if ((item = cJSON_GetObjectItem(root, "enable_crc"))) web_config->enable_crc = cJSON_IsTrue(item);
-    if ((item = cJSON_GetObjectItem(root, "enable_ldro"))) web_config->enable_ldro = cJSON_IsTrue(item);
-    if ((item = cJSON_GetObjectItem(root, "preamble_length"))) web_config->preamble_length = item->valueint;
-    if ((item = cJSON_GetObjectItem(root, "symbol_timeout"))) web_config->symbol_timeout = item->valueint;
+    
+    // Node Identity
+    if ((item = cJSON_GetObjectItem(root, "node_id"))) {
+        web_config->node_id = item->valueint;
+        ESP_LOGI(TAG, "Setting node_id: %d", web_config->node_id);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "node_name"))) {
+        strncpy(web_config->node_name, item->valuestring, sizeof(web_config->node_name)-1);
+        ESP_LOGI(TAG, "Setting node_name: %s", web_config->node_name);
+    }
+    
+    // LoRa Parameters - CRITICAL: MUST INCLUDE THESE
+    if ((item = cJSON_GetObjectItem(root, "frequency"))) {
+        web_config->frequency = item->valueint;
+        ESP_LOGI(TAG, "Setting frequency: %lu", web_config->frequency);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "spreading_factor"))) {
+        web_config->spreading_factor = item->valueint;
+        ESP_LOGI(TAG, "Setting spreading_factor: %d", web_config->spreading_factor);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "bandwidth"))) {
+        web_config->bandwidth = item->valueint;
+        ESP_LOGI(TAG, "Setting bandwidth: %lu", web_config->bandwidth);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "coding_rate"))) {
+        web_config->coding_rate = item->valueint;
+        ESP_LOGI(TAG, "Setting coding_rate: %d", web_config->coding_rate);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "tx_power"))) {
+        web_config->tx_power = item->valueint;
+        ESP_LOGI(TAG, "Setting tx_power: %d", web_config->tx_power);
+    }
+    
+    // Encryption - CRITICAL
+    if ((item = cJSON_GetObjectItem(root, "enable_encryption"))) {
+        web_config->enable_encryption = cJSON_IsTrue(item);
+        ESP_LOGI(TAG, "Setting enable_encryption: %s", 
+                 web_config->enable_encryption ? "true" : "false");
+    }
+    
+    // Network Parameters
+    if ((item = cJSON_GetObjectItem(root, "ping_interval"))) {
+        web_config->ping_interval = item->valueint;
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "beacon_interval"))) {
+        web_config->beacon_interval = item->valueint;
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "route_timeout"))) {
+        web_config->route_timeout = item->valueint;
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "max_hops"))) {
+        web_config->max_hops = item->valueint;
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "enable_ack"))) {
+        web_config->enable_ack = cJSON_IsTrue(item);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "ack_timeout"))) {
+        web_config->ack_timeout = item->valueint;
+    }
+    
+    // Mesh Parameters
+    if ((item = cJSON_GetObjectItem(root, "enable_self_healing"))) {
+        web_config->enable_self_healing = cJSON_IsTrue(item);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "healing_timeout"))) {
+        web_config->healing_timeout = item->valueint;
+    }
+    
+    // Web Server
+    if ((item = cJSON_GetObjectItem(root, "enable_web_server"))) {
+        web_config->enable_web_server = cJSON_IsTrue(item);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "web_port"))) {
+        web_config->web_port = item->valueint;
+    }
+    
+    // Advanced LoRa
+    if ((item = cJSON_GetObjectItem(root, "enable_crc"))) {
+        web_config->enable_crc = cJSON_IsTrue(item);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "enable_ldro"))) {
+        web_config->enable_ldro = cJSON_IsTrue(item);
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "preamble_length"))) {
+        web_config->preamble_length = item->valueint;
+    }
+    
+    if ((item = cJSON_GetObjectItem(root, "symbol_timeout"))) {
+        web_config->symbol_timeout = item->valueint;
+    }
     
     // Save to NVS
     if (config_save(web_config)) {
+        ESP_LOGI(TAG, "Configuration saved to NVS");
+        
+        // DEBUG: Print what was saved
+        ESP_LOGI(TAG, "Saved values: SF=%d, Enc=%s, Freq=%.1fMHz", 
+                 web_config->spreading_factor,
+                 web_config->enable_encryption ? "Y" : "N",
+                 web_config->frequency / 1000000.0);
+        
         cJSON *response = cJSON_CreateObject();
         cJSON_AddBoolToObject(response, "success", true);
+        cJSON_AddNumberToObject(response, "spreading_factor", web_config->spreading_factor);
+        cJSON_AddBoolToObject(response, "enable_encryption", web_config->enable_encryption);
         const char *json_str = cJSON_Print(response);
         httpd_resp_set_type(req, "application/json");
         httpd_resp_send(req, json_str, strlen(json_str));
         cJSON_Delete(response);
         free((void*)json_str);
-        ESP_LOGI(TAG, "Configuration updated via web");
     } else {
+        ESP_LOGE(TAG, "Failed to save config to NVS");
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save config");
     }
     
@@ -233,12 +349,36 @@ static esp_err_t api_routes_handler(httpd_req_t *req) {
     free((void*)json_str);
     return ESP_OK;
 }
+static esp_err_t api_ping_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "API: Ping request received");
+    
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "success", true);
+    cJSON_AddStringToObject(response, "message", "Ping sent to all nodes");
+    
+    const char *json_str = cJSON_Print(response);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_str, strlen(json_str));
+    
+    cJSON_Delete(response);
+    free((void*)json_str);
+    
+    // Actually send ping via LoRa
+    mesh_send_ping();
+    
+    return ESP_OK;
+}
 // Start web server with embedded content
+// In web_server_start function:
 void web_server_start(lora_config_t *config) {
     web_config = config;
     
+    ESP_LOGI(TAG, "=== Web Server Debug ===");
+    ESP_LOGI(TAG, "Config enable_web_server: %s", config->enable_web_server ? "YES" : "NO");
+    ESP_LOGI(TAG, "Config web_port: %d", config->web_port);
+    
     if (!config->enable_web_server) {
-        ESP_LOGI(TAG, "Web server disabled");
+        ESP_LOGW(TAG, "Web server disabled by configuration");
         return;
     }
     
@@ -246,8 +386,13 @@ void web_server_start(lora_config_t *config) {
     server_config.server_port = config->web_port;
     server_config.max_uri_handlers = 15;
     server_config.lru_purge_enable = true;
+    server_config.recv_wait_timeout = 10;  // Add this
+    server_config.send_wait_timeout = 10;  // Add this
     
-    if (httpd_start(&server, &server_config) == ESP_OK) {
+    ESP_LOGI(TAG, "Attempting to start HTTP server on port %d...", server_config.server_port);
+    
+    esp_err_t ret = httpd_start(&server, &server_config);
+    if (ret == ESP_OK) {
         // Register embedded HTML handlers
         httpd_uri_t dashboard = {.uri = "/", .method = HTTP_GET, .handler = dashboard_handler};
         httpd_register_uri_handler(server, &dashboard);
@@ -280,10 +425,19 @@ void web_server_start(lora_config_t *config) {
         httpd_uri_t api_routes = {.uri = "/api/routes", .method = HTTP_GET, .handler = api_routes_handler};
         httpd_register_uri_handler(server, &api_routes);
         
-        ESP_LOGI(TAG, "Web server started on port %d", config->web_port);
-        ESP_LOGI(TAG, "Serving embedded HTML/CSS/JS from flash");
+        // Add ping endpoint
+        httpd_uri_t api_ping = {.uri = "/api/ping", .method = HTTP_POST, .handler = api_ping_handler};
+        httpd_register_uri_handler(server, &api_ping);
+        // Add NVS debug endpoint
+        httpd_uri_t api_debug_nvs = {.uri = "/api/debug/nvs", .method = HTTP_GET, .handler = api_debug_nvs_handler};
+        httpd_register_uri_handler(server, &api_debug_nvs);
+        
+        ESP_LOGI(TAG, "=== Web Server Started Successfully ===");
+        ESP_LOGI(TAG, "Access at: http://192.168.4.1");
+        ESP_LOGI(TAG, "Registered URIs: /, /config, /devices, /api/*");
     } else {
-        ESP_LOGE(TAG, "Failed to start web server");
+        ESP_LOGE(TAG, "Failed to start web server: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Error code: %d", ret);
     }
 }
 

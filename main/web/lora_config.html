@@ -229,6 +229,9 @@
                 <button class="btn btn-success" onclick="applyConfig()">
                     <i class="fas fa-bolt"></i> Apply Now
                 </button>
+                <button class="btn btn-warning" onclick="debugNVS()">
+                    <i class="fas fa-bug"></i> Debug NVS
+                </button>
             </div>
 
             <!-- Status Message -->
@@ -252,7 +255,20 @@
             document.getElementById(tabName + '-tab').classList.add('active');
             event.target.classList.add('active');
         }
-        
+        //Debug NVS
+        async function debugNVS() {
+        try {
+            const response = await fetch('/api/debug/nvs');
+            const result = await response.json();
+            if (result.success) {
+                showStatus('NVS debug sent to serial console', 'success');
+                alert('Check serial monitor for NVS debug output');
+            }
+        } catch (error) {
+            console.error('Error debugging NVS:', error);
+            showStatus('Error debugging NVS', 'error');
+        }
+    }
         // Load current configuration
         async function loadConfig() {
             try {
@@ -301,18 +317,28 @@
         // Save configuration
         async function saveConfig() {
             const config = {
+                // Node Identity
                 node_id: parseInt(document.getElementById('nodeIdSelect').value),
                 node_name: document.getElementById('nodeName').value,
+                
+                // LoRa Parameters - MUST INCLUDE THESE
                 frequency: parseInt(document.getElementById('frequency').value),
-                spreading_factor: parseInt(document.getElementById('spreadingFactor').value),
+                spreading_factor: parseInt(document.getElementById('spreadingFactor').value), // THIS ONE!
                 bandwidth: parseInt(document.getElementById('bandwidth').value),
                 coding_rate: parseInt(document.getElementById('codingRate').value),
                 tx_power: parseInt(document.getElementById('txPower').value),
+                
+                // Encryption - MUST INCLUDE THIS
+                enable_encryption: document.getElementById('enableEncryption').checked,
+                
+                // Advanced settings
                 sync_word: parseInt(document.getElementById('syncWord').value, 16),
                 preamble_length: parseInt(document.getElementById('preambleLength').value),
                 enable_crc: document.getElementById('enableCrc').checked,
                 enable_ldro: document.getElementById('enableLdro').checked,
                 symbol_timeout: parseInt(document.getElementById('symbolTimeout').value),
+                
+                // Network settings
                 ping_interval: parseInt(document.getElementById('pingInterval').value),
                 beacon_interval: parseInt(document.getElementById('beaconInterval').value),
                 route_timeout: parseInt(document.getElementById('routeTimeout').value),
@@ -320,8 +346,15 @@
                 enable_ack: document.getElementById('enableAck').checked,
                 enable_self_healing: document.getElementById('enableSelfHealing').checked,
                 ack_timeout: parseInt(document.getElementById('ackTimeout').value),
-                enable_encryption: document.getElementById('enableEncryption').checked
+                
+                // Web server
+                enable_web_server: true,  // Always true
+                web_port: 80
             };
+            
+            console.log("Saving config:", config);
+            console.log("Spreading Factor:", config.spreading_factor);
+            console.log("Encryption:", config.enable_encryption);
             
             try {
                 const response = await fetch('/api/config', {
@@ -331,14 +364,16 @@
                 });
                 
                 const result = await response.json();
+                console.log("Save result:", result);
+                
                 if (result.success) {
-                    showStatus('Configuration saved successfully', 'success');
+                    showStatus(`Configuration saved! SF=${result.spreading_factor}, Enc=${result.enable_encryption ? 'On' : 'Off'}`, 'success');
                 } else {
                     showStatus('Error saving configuration', 'error');
                 }
             } catch (error) {
                 console.error('Error saving config:', error);
-                showStatus('Error saving configuration', 'error');
+                showStatus('Error saving configuration: ' + error.message, 'error');
             }
         }
         

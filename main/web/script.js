@@ -1,4 +1,5 @@
 // Common JavaScript functions for all pages
+// script.js - COMPLETE FIXED VERSION
 
 // Utility functions
 function showToast(message, type = 'info') {
@@ -35,6 +36,43 @@ function showToast(message, type = 'info') {
     }, 5000);
 }
 
+// Format time difference from microseconds to human readable
+function formatTimeDifference(microseconds) {
+    const seconds = Math.floor(microseconds / 1000000);
+    
+    if (seconds < 60) {
+        return `${seconds} seconds ago`;
+    } else if (seconds < 3600) {
+        const minutes = Math.floor(seconds / 60);
+        return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+    } else if (seconds < 86400) {
+        const hours = Math.floor(seconds / 3600);
+        return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else {
+        const days = Math.floor(seconds / 86400);
+        return `${days} day${days > 1 ? 's' : ''} ago`;
+    }
+}
+
+// Format uptime from microseconds
+function formatUptime(microseconds) {
+    const seconds = Math.floor(microseconds / 1000000);
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (days > 0) {
+        return `${days}d ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+        return `${hours}h ${minutes}m ${secs}s`;
+    } else if (minutes > 0) {
+        return `${minutes}m ${secs}s`;
+    } else {
+        return `${secs}s`;
+    }
+}
+
 // Format bytes to human readable
 function formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
@@ -46,21 +84,6 @@ function formatBytes(bytes, decimals = 2) {
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-}
-
-// Format time
-function formatTime(seconds) {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = Math.floor(seconds % 60);
-    
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    } else if (minutes > 0) {
-        return `${minutes}m ${secs}s`;
-    } else {
-        return `${secs}s`;
-    }
 }
 
 // Calculate signal quality from RSSI
@@ -310,11 +333,243 @@ addCSS(`
     }
 `);
 
+// Dashboard specific functions
+async function updateDashboard() {
+    try {
+        // Update node count
+        const nodesRes = await fetch('/api/nodes');
+        const nodes = await nodesRes.json();
+        document.getElementById('nodeCount').textContent = nodes.length;
+        
+        // Calculate average RSSI
+        let totalRssi = 0;
+        let count = 0;
+        nodes.forEach(node => {
+            if (node.online && node.rssi !== 0) {
+                totalRssi += node.rssi;
+                count++;
+            }
+        });
+        document.getElementById('avgRssi').textContent = count > 0 ? Math.round(totalRssi / count) : 0;
+        
+        // Update route count
+        const routesRes = await fetch('/api/routes');
+        const routes = await routesRes.json();
+        let activeRoutes = routes.filter(route => route.active).length;
+        document.getElementById('routeCount').textContent = activeRoutes;
+        
+        // Update uptime (get from first node which should be self)
+        if (nodes.length > 0) {
+            const uptimeFormatted = formatUptime(nodes[0].uptime * 1000000); // Convert back to microseconds
+            document.getElementById('uptime').textContent = uptimeFormatted;
+        }
+        
+    } catch (error) {
+        console.error('Error updating dashboard:', error);
+    }
+}
+
+// Devices page functions
+async function loadDevices() {
+    try {
+        // Load nodes
+        const nodesRes = await fetch('/api/nodes');
+        const nodes = await nodesRes.json();
+        
+        const devicesList = document.getElementById('devicesList');
+        devicesList.innerHTML = '';
+        
+        nodes.forEach(node => {
+            const deviceCard = document.createElement('div');
+            deviceCard.className = `device-card ${node.id === 1 ? 'master' : ''} ${!node.online ? 'offline' : ''}`;
+            
+            // Convert seconds to human readable
+            const timeAgo = formatTimeDifference(node.last_seen * 1000000);
+            const uptimeFormatted = formatUptime(node.uptime * 1000000);
+            
+            deviceCard.innerHTML = `
+                <div class="device-icon">
+                    <i class="fas ${node.id === 1 ? 'fa-crown' : 'fa-microchip'}"></i>
+                </div>
+                <div class="device-info">
+                    <h3>${node.name}</h3>
+                    <p>ID: ${node.id} ${node.id === 1 ? '(Master)' : '(Slave)'}</p>
+                    <div class="device-stats">
+                        <span class="stat"><i class="fas fa-signal"></i> ${node.rssi} dBm</span>
+                        <span class="stat"><i class="fas fa-route"></i> ${node.hop_count} hops</span>
+                        <span class="stat"><i class="fas fa-clock"></i> ${timeAgo}</span>
+                    </div>
+                </div>
+                <div class="device-status">
+                    <span class="status-indicator ${node.online ? 'online' : 'offline'}"></span>
+                    <span>${node.online ? 'Online' : 'Offline'}</span>
+                </div>
+            `;
+            
+            deviceCard.onclick = () => showNodeDetails(node);
+            devicesList.appendChild(deviceCard);
+        });
+        
+        // Load routes
+        const routesRes = await fetch('/api/routes');
+        const routes = await routesRes.json();
+        
+        const tableBody = document.getElementById('routingTableBody');
+        tableBody.innerHTML = '';
+        
+        routes.forEach(route => {
+            const row = tableBody.insertRow();
+            const timeAgo = formatTimeDifference(route.last_update * 1000000);
+            
+            row.innerHTML = `
+                <td>${route.destination}</td>
+                <td>${route.next_hop}</td>
+                <td>${route.hop_count}</td>
+                <td>
+                    <div class="quality-bar">
+                        <div class="quality-fill" style="width: ${Math.min(100, (route.link_quality + 130) * 2)}%"></div>
+                    </div>
+                    ${route.link_quality} dBm
+                </td>
+                <td>${timeAgo}</td>
+                <td>
+                    <span class="status-badge ${route.active ? 'active' : 'inactive'}">
+                        ${route.active ? 'Active' : 'Inactive'}
+                    </span>
+                </td>
+            `;
+        });
+        
+    } catch (error) {
+        console.error('Error loading devices:', error);
+        showToast('Failed to load devices: ' + error.message, 'error');
+    }
+}
+
+// Show node details modal
+function showNodeDetails(node) {
+    const modal = document.getElementById('nodeModal');
+    const details = document.getElementById('nodeDetails');
+    
+    const timeAgo = formatTimeDifference(node.last_seen * 1000000);
+    const uptimeFormatted = formatUptime(node.uptime * 1000000);
+    const signalQuality = calculateSignalQuality(node.rssi);
+    const signalColor = getSignalColor(signalQuality);
+    
+    details.innerHTML = `
+        <div class="node-detail-section">
+            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+            <p><strong>Node ID:</strong> ${node.id}</p>
+            <p><strong>Name:</strong> ${node.name}</p>
+            <p><strong>Role:</strong> ${node.id === 1 ? 'Master' : 'Slave'}</p>
+            <p><strong>Status:</strong> <span class="status-badge ${node.online ? 'active' : 'inactive'}">
+                ${node.online ? 'Online' : 'Offline'}
+            </span></p>
+            <p><strong>Last Seen:</strong> ${timeAgo}</p>
+            <p><strong>Uptime:</strong> ${uptimeFormatted}</p>
+        </div>
+        
+        <div class="node-detail-section">
+            <h3><i class="fas fa-chart-line"></i> Performance Metrics</h3>
+            <p><strong>RSSI:</strong> ${node.rssi} dBm</p>
+            <p><strong>Signal Quality:</strong> 
+                <span style="color: ${signalColor}; font-weight: bold;">${signalQuality}%</span>
+            </p>
+            <p><strong>Hop Count:</strong> ${node.hop_count}</p>
+        </div>
+        
+        <div class="node-detail-section">
+            <h3><i class="fas fa-cogs"></i> Actions</h3>
+            <div class="action-buttons">
+                <button class="btn btn-small" onclick="pingNode(${node.id})">
+                    <i class="fas fa-bullhorn"></i> Ping Node
+                </button>
+                <button class="btn btn-small" onclick="sendMessage(${node.id})">
+                    <i class="fas fa-envelope"></i> Send Message
+                </button>
+                ${node.id !== 1 ? `
+                    <button class="btn btn-small btn-danger" onclick="removeNode(${node.id})">
+                        <i class="fas fa-trash"></i> Remove Node
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `;
+    
+    modal.style.display = 'block';
+}
+
+// Dashboard functions
+function sendPing() {
+    fetch('/api/ping', { method: 'POST' })
+        .then(response => {
+            showToast('Ping sent to all nodes', 'success');
+            addActivity('Sent ping to all nodes', 'tx');
+        })
+        .catch(error => {
+            console.error('Error sending ping:', error);
+            showToast('Failed to send ping: ' + error.message, 'error');
+        });
+}
+
+function discoverNodes() {
+    fetch('/api/discover', { method: 'POST' })
+        .then(response => {
+            showToast('Node discovery initiated', 'success');
+            addActivity('Initiating node discovery', 'tx');
+        })
+        .catch(error => {
+            console.error('Error discovering nodes:', error);
+            showToast('Failed to discover nodes: ' + error.message, 'error');
+        });
+}
+
+function refreshNetwork() {
+    if (window.location.pathname === '/') {
+        updateDashboard();
+    } else if (window.location.pathname === '/devices') {
+        loadDevices();
+    }
+    showToast('Network data refreshed', 'info');
+}
+
+function addActivity(message, type) {
+    const activityList = document.getElementById('activityList');
+    if (!activityList) return;
+    
+    const activityItem = document.createElement('div');
+    activityItem.className = 'activity-item';
+    
+    const iconClass = type === 'tx' ? 'fas fa-paper-plane' : 
+                     type === 'rx' ? 'fas fa-broadcast-tower' : 
+                     'fas fa-info-circle';
+    const iconColor = type === 'tx' ? 'tx' : 
+                     type === 'rx' ? 'rx' : 'info';
+    
+    activityItem.innerHTML = `
+        <div class="activity-icon ${iconColor}">
+            <i class="${iconClass}"></i>
+        </div>
+        <div class="activity-details">
+            <p>${message}</p>
+            <span class="activity-time">${getCurrentTime()}</span>
+        </div>
+    `;
+    
+    activityList.prepend(activityItem);
+    
+    // Keep only last 10 activities
+    while (activityList.children.length > 10) {
+        activityList.removeChild(activityList.lastChild);
+    }
+}
+
 // Export functions for use in other scripts
 window.CommonUtils = {
     showToast,
     formatBytes,
-    formatTime,
+    formatTimeDifference,
+    formatUptime,
     calculateSignalQuality,
     getSignalColor,
     debounce,
@@ -335,3 +590,38 @@ window.CommonUtils = {
     deepClone,
     mergeObjects
 };
+
+// Initialize based on current page
+document.addEventListener('DOMContentLoaded', function() {
+    const path = window.location.pathname;
+    
+    if (path === '/' || path === '/index.html') {
+        // Dashboard page
+        updateDashboard();
+        setInterval(updateDashboard, 10000); // Update every 10 seconds
+    } else if (path === '/devices') {
+        // Devices page
+        loadDevices();
+        setInterval(loadDevices, 10000); // Update every 10 seconds
+    } else if (path === '/config') {
+        // Config page - loadConfig is called from lora_config.html
+        console.log('Config page loaded');
+    }
+    
+    // Update current node ID if available
+    fetch('/api/config')
+        .then(response => response.json())
+        .then(config => {
+            const nodeIdElements = document.querySelectorAll('#nodeId, #nodeIdValue');
+            nodeIdElements.forEach(el => {
+                if (el.id === 'nodeIdValue') {
+                    el.textContent = config.node_id;
+                } else {
+                    el.textContent = config.node_id;
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error loading node ID:', error);
+        });
+});
