@@ -34,7 +34,7 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
-    debug_nvs_content();
+    //debug_nvs_content();
     // Initialize network stack
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
@@ -46,7 +46,7 @@ void app_main(void)
         config_load_defaults(&g_config);
         config_save(&g_config);
         // DEBUG: Print NVS after saving defaults
-        debug_nvs_content();
+        //debug_nvs_content();
     }
     config_print(&g_config);
 
@@ -81,7 +81,7 @@ void app_main(void)
     ESP_LOGI(TAG, "web_port: %d", g_config.web_port);
     
     // Start web server with embedded HTML
-    web_server_start(&g_config);
+    web_server_start();
    
     // Start LoRa mesh task
     xTaskCreate(lora_mesh_task, "mesh_task", 8192, &g_config, 5, NULL);

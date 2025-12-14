@@ -1,450 +1,391 @@
-#include "web_server.h"
-#include "esp_http_server.h"
-#include "esp_log.h"
-#include "cJSON.h"
+// In web_server.c
+#include <stdio.h>
 #include <string.h>
-#include "esp_timer.h"
-#include "lora_mesh.h"
+#include <stdlib.h>
+#include <sys/param.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_system.h"
+#include "esp_log.h"
+#include "esp_http_server.h"
+#include "esp_event.h"
+#include "esp_vfs.h"
+#include "cJSON.h"
+#include "lwip/err.h"
+#include "lwip/sys.h"
+#include "config_manager.h"
+#include "mesh_manager.h"
+#include "mesh_types.h"
+
+
 static const char *TAG = "WEB_SERVER";
-static httpd_handle_t server = NULL;
-static lora_config_t *web_config;
 
-// Embedded HTML pages - directly in flash
+// HTML files (embedded)
 extern const char dashboard_html_start[] asm("_binary_dashboard_html_start");
-extern const char dashboard_html_end[]   asm("_binary_dashboard_html_end");
+extern const char dashboard_html_end[] asm("_binary_dashboard_html_end");
 extern const char lora_config_html_start[] asm("_binary_lora_config_html_start");
-extern const char lora_config_html_end[]   asm("_binary_lora_config_html_end");
+extern const char lora_config_html_end[] asm("_binary_lora_config_html_end");
 extern const char devices_html_start[] asm("_binary_devices_html_start");
-extern const char devices_html_end[]   asm("_binary_devices_html_end");
+extern const char devices_html_end[] asm("_binary_devices_html_end");
 extern const char styles_css_start[] asm("_binary_styles_css_start");
-extern const char styles_css_end[]   asm("_binary_styles_css_end");
+extern const char styles_css_end[] asm("_binary_styles_css_end");
 extern const char script_js_start[] asm("_binary_script_js_start");
-extern const char script_js_end[]   asm("_binary_script_js_end");
+extern const char script_js_end[] asm("_binary_script_js_end");
 
-// Embedded favicon (1x1 transparent PNG)
-static const unsigned char favicon_png[] = {
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-    0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-    0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-    0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-    0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+// Forward declarations
+static esp_err_t dashboard_html_handler(httpd_req_t *req);
+static esp_err_t lora_config_html_handler(httpd_req_t *req);
+static esp_err_t devices_html_handler(httpd_req_t *req);
+static esp_err_t styles_css_handler(httpd_req_t *req);
+static esp_err_t script_js_handler(httpd_req_t *req);
+static esp_err_t get_config_handler(httpd_req_t *req);
+static esp_err_t get_nodes_handler(httpd_req_t *req);
+static esp_err_t post_ping_handler(httpd_req_t *req);
+static esp_err_t post_discover_handler(httpd_req_t *req);
+static esp_err_t favicon_handler(httpd_req_t *req);
+static esp_err_t test_handler(httpd_req_t *req);
+
+// Helper function to send JSON response
+static esp_err_t send_json_response(httpd_req_t *req, bool success, const char *message, cJSON *data) {
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddBoolToObject(root, "success", success);
+    
+    if (message != NULL) {
+        cJSON_AddStringToObject(root, "message", message);
+    }
+    
+    if (data != NULL) {
+        cJSON_AddItemToObject(root, "data", data);
+    }
+    
+    char *json_str = cJSON_PrintUnformatted(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, json_str, strlen(json_str));
+    
+    free(json_str);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
+// GET /config - Configuration endpoint
+static esp_err_t get_config_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "GET /config");
+    
+    lora_config_t config;
+    esp_err_t err = config_load(&config);
+    
+    if (err != ESP_OK) {
+        return send_json_response(req, false, "Failed to load configuration", NULL);
+    }
+    
+    cJSON *data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "node_id", config.node_id);
+    cJSON_AddStringToObject(data, "node_name", config.node_name);
+    cJSON_AddNumberToObject(data, "frequency", config.frequency);
+    cJSON_AddNumberToObject(data, "spread_factor", config.spread_factor);
+    cJSON_AddNumberToObject(data, "bandwidth", config.bandwidth);
+    cJSON_AddNumberToObject(data, "coding_rate", config.coding_rate);
+    cJSON_AddNumberToObject(data, "tx_power", config.tx_power);
+    cJSON_AddNumberToObject(data, "sync_word", config.sync_word);
+    cJSON_AddNumberToObject(data, "ping_interval", config.ping_interval);
+    cJSON_AddNumberToObject(data, "beacon_interval", config.beacon_interval);
+    cJSON_AddNumberToObject(data, "route_timeout", config.route_timeout);
+    cJSON_AddNumberToObject(data, "max_hops", config.max_hops);
+    cJSON_AddBoolToObject(data, "enable_ack", config.enable_ack);
+    cJSON_AddNumberToObject(data, "ack_timeout", config.ack_timeout);
+    cJSON_AddBoolToObject(data, "enable_self_healing", config.enable_self_healing);
+    cJSON_AddNumberToObject(data, "healing_timeout", config.healing_timeout);
+    cJSON_AddStringToObject(data, "wifi_ssid", config.wifi_ssid);
+    cJSON_AddBoolToObject(data, "enable_web_server", config.enable_web_server);
+    cJSON_AddNumberToObject(data, "web_port", config.web_port);
+    cJSON_AddBoolToObject(data, "enable_encryption", config.enable_encryption);
+    cJSON_AddBoolToObject(data, "enable_crc", config.enable_crc);
+    cJSON_AddBoolToObject(data, "enable_ldro", config.enable_ldro);
+    cJSON_AddNumberToObject(data, "preamble_length", config.preamble_length);
+    cJSON_AddNumberToObject(data, "symbol_timeout", config.symbol_timeout);
+    
+    return send_json_response(req, true, "Configuration loaded", data);
+}
+
+// GET /api/nodes - Mesh nodes
+static esp_err_t get_nodes_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "GET /api/nodes");
+    
+    // Create sample nodes for testing
+    cJSON *nodes_array = cJSON_CreateArray();
+    
+    // Add self
+    cJSON *self_node = cJSON_CreateObject();
+    cJSON_AddNumberToObject(self_node, "id", 1);
+    cJSON_AddStringToObject(self_node, "name", "Master");
+    cJSON_AddNumberToObject(self_node, "rssi", 0);
+    cJSON_AddNumberToObject(self_node, "hops", 0);
+    cJSON_AddStringToObject(self_node, "last_seen", "now");
+    cJSON_AddBoolToObject(self_node, "online", true);
+    cJSON_AddItemToArray(nodes_array, self_node);
+    
+    // Add sample nodes
+    cJSON *node2 = cJSON_CreateObject();
+    cJSON_AddNumberToObject(node2, "id", 2);
+    cJSON_AddStringToObject(node2, "name", "Node-2");
+    cJSON_AddNumberToObject(node2, "rssi", -65);
+    cJSON_AddNumberToObject(node2, "hops", 1);
+    cJSON_AddStringToObject(node2, "last_seen", "30s ago");
+    cJSON_AddBoolToObject(node2, "online", true);
+    cJSON_AddItemToArray(nodes_array, node2);
+    
+    cJSON *node3 = cJSON_CreateObject();
+    cJSON_AddNumberToObject(node3, "id", 3);
+    cJSON_AddStringToObject(node3, "name", "Node-3");
+    cJSON_AddNumberToObject(node3, "rssi", -72);
+    cJSON_AddNumberToObject(node3, "hops", 2);
+    cJSON_AddStringToObject(node3, "last_seen", "1m ago");
+    cJSON_AddBoolToObject(node3, "online", true);
+    cJSON_AddItemToArray(nodes_array, node3);
+    
+    cJSON *data = cJSON_CreateObject();
+    cJSON_AddItemToObject(data, "nodes", nodes_array);
+    cJSON_AddNumberToObject(data, "total", 3);
+    cJSON_AddNumberToObject(data, "online", 3);
+    
+    return send_json_response(req, true, "Nodes loaded", data);
+}
+
+// POST /api/ping
+static esp_err_t post_ping_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "POST /api/ping");
+    
+    // In real implementation, send actual ping via LoRa
+    cJSON *data = cJSON_CreateObject();
+    cJSON_AddStringToObject(data, "action", "ping_sent");
+    cJSON_AddNumberToObject(data, "timestamp", xTaskGetTickCount() * portTICK_PERIOD_MS);
+    
+    return send_json_response(req, true, "Ping sent to network", data);
+}
+
+// POST /api/discover
+static esp_err_t post_discover_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "POST /api/discover");
+    
+    // In real implementation, trigger network discovery
+    cJSON *data = cJSON_CreateObject();
+    cJSON_AddStringToObject(data, "action", "discovery_started");
+    cJSON_AddNumberToObject(data, "timestamp", xTaskGetTickCount() * portTICK_PERIOD_MS);
+    
+    return send_json_response(req, true, "Network discovery initiated", data);
+}
+
+// GET /api/test - Test endpoint
+static esp_err_t test_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "GET /api/test");
+    
+    cJSON *data = cJSON_CreateObject();
+    cJSON_AddStringToObject(data, "status", "online");
+    cJSON_AddNumberToObject(data, "uptime", xTaskGetTickCount() * portTICK_PERIOD_MS / 1000);
+    cJSON_AddStringToObject(data, "version", "1.0.0");
+    
+    return send_json_response(req, true, "Web server is working", data);
+}
+
+// GET /favicon.ico - Empty favicon
+static esp_err_t favicon_handler(httpd_req_t *req) {
+    // Empty 1x1 pixel transparent PNG
+    const unsigned char favicon[] = {
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
+        0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+        0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+    };
+    
+    httpd_resp_set_type(req, "image/x-icon");
+    httpd_resp_send(req, (const char *)favicon, sizeof(favicon));
+    return ESP_OK;
+}
+
+// HTML/CSS/JS handlers
+static esp_err_t dashboard_html_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/html");
+    size_t html_len = dashboard_html_end - dashboard_html_start;
+    httpd_resp_send(req, dashboard_html_start, html_len);
+    return ESP_OK;
+}
+
+static esp_err_t lora_config_html_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/html");
+    size_t html_len = lora_config_html_end - lora_config_html_start;
+    httpd_resp_send(req, lora_config_html_start, html_len);
+    return ESP_OK;
+}
+
+static esp_err_t devices_html_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/html");
+    size_t html_len = devices_html_end - devices_html_start;
+    httpd_resp_send(req, devices_html_start, html_len);
+    return ESP_OK;
+}
+
+static esp_err_t styles_css_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "text/css");
+    size_t css_len = styles_css_end - styles_css_start;
+    httpd_resp_send(req, styles_css_start, css_len);
+    return ESP_OK;
+}
+
+static esp_err_t script_js_handler(httpd_req_t *req) {
+    httpd_resp_set_type(req, "application/javascript");
+    size_t js_len = script_js_end - script_js_start;
+    httpd_resp_send(req, script_js_start, js_len);
+    return ESP_OK;
+}
+
+// URI definitions
+static const httpd_uri_t dashboard_uri = {
+    .uri       = "/",
+    .method    = HTTP_GET,
+    .handler   = dashboard_html_handler,
+    .user_ctx  = NULL
 };
 
-// HTTP request handlers for embedded content
-static esp_err_t dashboard_handler(httpd_req_t *req) {
-    size_t html_len = dashboard_html_end - dashboard_html_start;
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    httpd_resp_send(req, (const char*)dashboard_html_start, html_len);
-    ESP_LOGD(TAG, "Served dashboard.html (%d bytes)", html_len);
-    return ESP_OK;
+static const httpd_uri_t dashboard_html_uri = {
+    .uri       = "/dashboard.html",
+    .method    = HTTP_GET,
+    .handler   = dashboard_html_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t lora_config_uri = {
+    .uri       = "/lora-config.html",
+    .method    = HTTP_GET,
+    .handler   = lora_config_html_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t devices_uri = {
+    .uri       = "/devices.html",
+    .method    = HTTP_GET,
+    .handler   = devices_html_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t styles_uri = {
+    .uri       = "/styles.css",
+    .method    = HTTP_GET,
+    .handler   = styles_css_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t script_uri = {
+    .uri       = "/script.js",
+    .method    = HTTP_GET,
+    .handler   = script_js_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t favicon_uri = {
+    .uri       = "/favicon.ico",
+    .method    = HTTP_GET,
+    .handler   = favicon_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t get_config_uri = {
+    .uri       = "/config",
+    .method    = HTTP_GET,
+    .handler   = get_config_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t get_nodes_uri = {
+    .uri       = "/api/nodes",
+    .method    = HTTP_GET,
+    .handler   = get_nodes_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t post_ping_uri = {
+    .uri       = "/api/ping",
+    .method    = HTTP_POST,
+    .handler   = post_ping_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t post_discover_uri = {
+    .uri       = "/api/discover",
+    .method    = HTTP_POST,
+    .handler   = post_discover_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t test_uri = {
+    .uri       = "/api/test",
+    .method    = HTTP_GET,
+    .handler   = test_handler,
+    .user_ctx  = NULL
+};
+
+// Start web server
+httpd_handle_t web_server_start(void) {
+    httpd_handle_t server = NULL;
+    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    
+    ESP_LOGI(TAG, "=== Starting Web Server ===");
+    
+    // Load configuration
+    lora_config_t current_config;
+    esp_err_t err = config_load(&current_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to load configuration");
+        return NULL;
+    }
+    
+    // Check if web server is enabled
+    if (!current_config.enable_web_server) {
+        ESP_LOGW(TAG, "Web server is disabled in configuration");
+        return NULL;
+    }
+    
+    // Set port
+    config.server_port = current_config.web_port;
+    config.stack_size = 8192;
+    config.max_uri_handlers = 20;
+    config.backlog_conn = 5;
+    
+    ESP_LOGI(TAG, "Starting HTTP server on port %d", config.server_port);
+    
+    // Start server
+    err = httpd_start(&server, &config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start HTTP server: %s", esp_err_to_name(err));
+        return NULL;
+    }
+    
+    // Register all URI handlers
+    httpd_register_uri_handler(server, &dashboard_uri);
+    httpd_register_uri_handler(server, &dashboard_html_uri);
+    httpd_register_uri_handler(server, &lora_config_uri);
+    httpd_register_uri_handler(server, &devices_uri);
+    httpd_register_uri_handler(server, &styles_uri);
+    httpd_register_uri_handler(server, &script_uri);
+    httpd_register_uri_handler(server, &favicon_uri);
+    httpd_register_uri_handler(server, &get_config_uri);
+    httpd_register_uri_handler(server, &get_nodes_uri);
+    httpd_register_uri_handler(server, &post_ping_uri);
+    httpd_register_uri_handler(server, &post_discover_uri);
+    httpd_register_uri_handler(server, &test_uri);
+    
+    ESP_LOGI(TAG, "Web server started successfully on port %d", config.server_port);
+    ESP_LOGI(TAG, "Dashboard: http://192.168.4.1");
+    ESP_LOGI(TAG, "Config: http://192.168.4.1/lora-config.html");
+    
+    return server;
 }
 
-static esp_err_t lora_config_handler(httpd_req_t *req) {
-    size_t html_len = lora_config_html_end - lora_config_html_start;
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    httpd_resp_send(req, (const char*)lora_config_html_start, html_len);
-    return ESP_OK;
-}
-
-static esp_err_t devices_handler(httpd_req_t *req) {
-    size_t html_len = devices_html_end - devices_html_start;
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
-    httpd_resp_send(req, (const char*)devices_html_start, html_len);
-    return ESP_OK;
-}
-
-static esp_err_t styles_handler(httpd_req_t *req) {
-    size_t css_len = styles_css_end - styles_css_start;
-    httpd_resp_set_type(req, "text/css");
-    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
-    httpd_resp_send(req, (const char*)styles_css_start, css_len);
-    return ESP_OK;
-}
-
-static esp_err_t script_handler(httpd_req_t *req) {
-    size_t js_len = script_js_end - script_js_start;
-    httpd_resp_set_type(req, "application/javascript");
-    httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
-    httpd_resp_send(req, (const char*)script_js_start, js_len);
-    return ESP_OK;
-}
-
-static esp_err_t favicon_handler(httpd_req_t *req) {
-    httpd_resp_set_type(req, "image/png");
-    httpd_resp_send(req, (const char*)favicon_png, sizeof(favicon_png));
-    return ESP_OK;
-}
-
-// API Handlers
-static esp_err_t api_config_get_handler(httpd_req_t *req) {
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "node_id", web_config->node_id);
-    cJSON_AddStringToObject(root, "node_name", web_config->node_name);
-    cJSON_AddNumberToObject(root, "frequency", web_config->frequency);
-    cJSON_AddNumberToObject(root, "spreading_factor", web_config->spreading_factor);
-    cJSON_AddNumberToObject(root, "bandwidth", web_config->bandwidth);
-    cJSON_AddNumberToObject(root, "coding_rate", web_config->coding_rate);
-    cJSON_AddNumberToObject(root, "tx_power", web_config->tx_power);
-    cJSON_AddNumberToObject(root, "sync_word", web_config->sync_word);
-    cJSON_AddNumberToObject(root, "ping_interval", web_config->ping_interval);
-    cJSON_AddNumberToObject(root, "beacon_interval", web_config->beacon_interval);
-    cJSON_AddNumberToObject(root, "route_timeout", web_config->route_timeout);
-    cJSON_AddNumberToObject(root, "max_hops", web_config->max_hops);
-    cJSON_AddBoolToObject(root, "enable_ack", web_config->enable_ack);
-    cJSON_AddNumberToObject(root, "ack_timeout", web_config->ack_timeout);
-    cJSON_AddBoolToObject(root, "enable_self_healing", web_config->enable_self_healing);
-    cJSON_AddNumberToObject(root, "healing_timeout", web_config->healing_timeout);
-    cJSON_AddBoolToObject(root, "enable_encryption", web_config->enable_encryption);
-    cJSON_AddBoolToObject(root, "enable_crc", web_config->enable_crc);
-    cJSON_AddBoolToObject(root, "enable_ldro", web_config->enable_ldro);
-    cJSON_AddNumberToObject(root, "preamble_length", web_config->preamble_length);
-    cJSON_AddNumberToObject(root, "symbol_timeout", web_config->symbol_timeout);
-    
-    const char *json_str = cJSON_Print(root);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_str, strlen(json_str));
-    
-    cJSON_Delete(root);
-    free((void*)json_str);
-    return ESP_OK;
-}
-static esp_err_t api_debug_nvs_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "API: Debug NVS request");
-    
-    // Create response
-    cJSON *response = cJSON_CreateObject();
-    
-    // Call debug function (it will log to serial)
-    debug_nvs_content();
-    
-    cJSON_AddBoolToObject(response, "success", true);
-    cJSON_AddStringToObject(response, "message", "NVS debug printed to serial console");
-    
-    const char *json_str = cJSON_Print(response);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_str, strlen(json_str));
-    
-    cJSON_Delete(response);
-    free((void*)json_str);
-    
-    return ESP_OK;
-}
-static esp_err_t api_config_post_handler(httpd_req_t *req) {
-    char buf[1024];
-    int ret = httpd_req_recv(req, buf, sizeof(buf)-1);
-    if (ret <= 0) return ESP_FAIL;
-    buf[ret] = '\0';
-    
-    ESP_LOGI(TAG, "API Config POST received: %s", buf);
-    
-    cJSON *root = cJSON_Parse(buf);
-    if (!root) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
-        return ESP_FAIL;
-    }
-    
-    // Update configuration from JSON - ADD ALL MISSING FIELDS
-    cJSON *item;
-    
-    // Node Identity
-    if ((item = cJSON_GetObjectItem(root, "node_id"))) {
-        web_config->node_id = item->valueint;
-        ESP_LOGI(TAG, "Setting node_id: %d", web_config->node_id);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "node_name"))) {
-        strncpy(web_config->node_name, item->valuestring, sizeof(web_config->node_name)-1);
-        ESP_LOGI(TAG, "Setting node_name: %s", web_config->node_name);
-    }
-    
-    // LoRa Parameters - CRITICAL: MUST INCLUDE THESE
-    if ((item = cJSON_GetObjectItem(root, "frequency"))) {
-        web_config->frequency = item->valueint;
-        ESP_LOGI(TAG, "Setting frequency: %lu", web_config->frequency);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "spreading_factor"))) {
-        web_config->spreading_factor = item->valueint;
-        ESP_LOGI(TAG, "Setting spreading_factor: %d", web_config->spreading_factor);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "bandwidth"))) {
-        web_config->bandwidth = item->valueint;
-        ESP_LOGI(TAG, "Setting bandwidth: %lu", web_config->bandwidth);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "coding_rate"))) {
-        web_config->coding_rate = item->valueint;
-        ESP_LOGI(TAG, "Setting coding_rate: %d", web_config->coding_rate);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "tx_power"))) {
-        web_config->tx_power = item->valueint;
-        ESP_LOGI(TAG, "Setting tx_power: %d", web_config->tx_power);
-    }
-    
-    // Encryption - CRITICAL
-    if ((item = cJSON_GetObjectItem(root, "enable_encryption"))) {
-        web_config->enable_encryption = cJSON_IsTrue(item);
-        ESP_LOGI(TAG, "Setting enable_encryption: %s", 
-                 web_config->enable_encryption ? "true" : "false");
-    }
-    
-    // Network Parameters
-    if ((item = cJSON_GetObjectItem(root, "ping_interval"))) {
-        web_config->ping_interval = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "beacon_interval"))) {
-        web_config->beacon_interval = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "route_timeout"))) {
-        web_config->route_timeout = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "max_hops"))) {
-        web_config->max_hops = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "enable_ack"))) {
-        web_config->enable_ack = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "ack_timeout"))) {
-        web_config->ack_timeout = item->valueint;
-    }
-    
-    // Mesh Parameters
-    if ((item = cJSON_GetObjectItem(root, "enable_self_healing"))) {
-        web_config->enable_self_healing = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "healing_timeout"))) {
-        web_config->healing_timeout = item->valueint;
-    }
-    
-    // Web Server
-    if ((item = cJSON_GetObjectItem(root, "enable_web_server"))) {
-        web_config->enable_web_server = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "web_port"))) {
-        web_config->web_port = item->valueint;
-    }
-    
-    // Advanced LoRa
-    if ((item = cJSON_GetObjectItem(root, "enable_crc"))) {
-        web_config->enable_crc = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "enable_ldro"))) {
-        web_config->enable_ldro = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "preamble_length"))) {
-        web_config->preamble_length = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "symbol_timeout"))) {
-        web_config->symbol_timeout = item->valueint;
-    }
-    
-    // Save to NVS
-    if (config_save(web_config)) {
-        ESP_LOGI(TAG, "Configuration saved to NVS");
-        
-        // DEBUG: Print what was saved
-        ESP_LOGI(TAG, "Saved values: SF=%d, Enc=%s, Freq=%.1fMHz", 
-                 web_config->spreading_factor,
-                 web_config->enable_encryption ? "Y" : "N",
-                 web_config->frequency / 1000000.0);
-        
-        cJSON *response = cJSON_CreateObject();
-        cJSON_AddBoolToObject(response, "success", true);
-        cJSON_AddNumberToObject(response, "spreading_factor", web_config->spreading_factor);
-        cJSON_AddBoolToObject(response, "enable_encryption", web_config->enable_encryption);
-        const char *json_str = cJSON_Print(response);
-        httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, json_str, strlen(json_str));
-        cJSON_Delete(response);
-        free((void*)json_str);
-    } else {
-        ESP_LOGE(TAG, "Failed to save config to NVS");
-        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save config");
-    }
-    
-    cJSON_Delete(root);
-    return ESP_OK;
-}
-
-static esp_err_t api_nodes_handler(httpd_req_t *req) {
-    cJSON *root = cJSON_CreateArray();
-    
-    // Get nodes from config_manager
-    for (int i = 0; i < mesh_get_node_count(); i++) {
-        node_info_t *node = mesh_get_node(i);
-        if (!node) continue;
-        
-        cJSON *node_obj = cJSON_CreateObject();
-        cJSON_AddNumberToObject(node_obj, "id", node->id);
-        cJSON_AddStringToObject(node_obj, "name", node->name);
-        cJSON_AddNumberToObject(node_obj, "rssi", node->rssi);
-        cJSON_AddNumberToObject(node_obj, "hop_count", node->hop_count);
-        
-        // Convert microseconds to seconds for web display
-        cJSON_AddNumberToObject(node_obj, "uptime", node->uptime / 1000000);
-        
-        // Calculate seconds since last seen
-        int64_t now_us = esp_timer_get_time();
-        int64_t last_seen_sec = (now_us - node->last_seen) / 1000000;
-        cJSON_AddNumberToObject(node_obj, "last_seen", last_seen_sec);
-        
-        cJSON_AddBoolToObject(node_obj, "online", node->online);
-        cJSON_AddItemToArray(root, node_obj);
-    }
-    
-    const char *json_str = cJSON_Print(root);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_str, strlen(json_str));
-    
-    cJSON_Delete(root);
-    free((void*)json_str);
-    return ESP_OK;
-}
-
-// In api_routes_handler
-static esp_err_t api_routes_handler(httpd_req_t *req) {
-    cJSON *root = cJSON_CreateArray();
-    
-    // Get routes from config_manager
-    for (int i = 0; i < mesh_get_route_count(); i++) {
-        route_info_t *route = mesh_get_route(i);
-        if (!route) continue;
-        
-        cJSON *route_obj = cJSON_CreateObject();
-        cJSON_AddNumberToObject(route_obj, "destination", route->destination);
-        cJSON_AddNumberToObject(route_obj, "next_hop", route->next_hop);
-        cJSON_AddNumberToObject(route_obj, "hop_count", route->hop_count);
-        cJSON_AddNumberToObject(route_obj, "link_quality", route->link_quality);
-        
-        // Convert microseconds to seconds for web display
-        int64_t now_us = esp_timer_get_time();
-        int64_t last_update_sec = (now_us - route->last_update) / 1000000;
-        cJSON_AddNumberToObject(route_obj, "last_update", last_update_sec);
-        
-        cJSON_AddBoolToObject(route_obj, "active", route->active);
-        cJSON_AddItemToArray(root, route_obj);
-    }
-    
-    const char *json_str = cJSON_Print(root);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_str, strlen(json_str));
-    
-    cJSON_Delete(root);
-    free((void*)json_str);
-    return ESP_OK;
-}
-static esp_err_t api_ping_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "API: Ping request received");
-    
-    cJSON *response = cJSON_CreateObject();
-    cJSON_AddBoolToObject(response, "success", true);
-    cJSON_AddStringToObject(response, "message", "Ping sent to all nodes");
-    
-    const char *json_str = cJSON_Print(response);
-    httpd_resp_set_type(req, "application/json");
-    httpd_resp_send(req, json_str, strlen(json_str));
-    
-    cJSON_Delete(response);
-    free((void*)json_str);
-    
-    // Actually send ping via LoRa
-    mesh_send_ping();
-    
-    return ESP_OK;
-}
-// Start web server with embedded content
-// In web_server_start function:
-void web_server_start(lora_config_t *config) {
-    web_config = config;
-    
-    ESP_LOGI(TAG, "=== Web Server Debug ===");
-    ESP_LOGI(TAG, "Config enable_web_server: %s", config->enable_web_server ? "YES" : "NO");
-    ESP_LOGI(TAG, "Config web_port: %d", config->web_port);
-    
-    if (!config->enable_web_server) {
-        ESP_LOGW(TAG, "Web server disabled by configuration");
-        return;
-    }
-    
-    httpd_config_t server_config = HTTPD_DEFAULT_CONFIG();
-    server_config.server_port = config->web_port;
-    server_config.max_uri_handlers = 15;
-    server_config.lru_purge_enable = true;
-    server_config.recv_wait_timeout = 10;  // Add this
-    server_config.send_wait_timeout = 10;  // Add this
-    
-    ESP_LOGI(TAG, "Attempting to start HTTP server on port %d...", server_config.server_port);
-    
-    esp_err_t ret = httpd_start(&server, &server_config);
-    if (ret == ESP_OK) {
-        // Register embedded HTML handlers
-        httpd_uri_t dashboard = {.uri = "/", .method = HTTP_GET, .handler = dashboard_handler};
-        httpd_register_uri_handler(server, &dashboard);
-        
-        httpd_uri_t config_page = {.uri = "/config", .method = HTTP_GET, .handler = lora_config_handler};
-        httpd_register_uri_handler(server, &config_page);
-        
-        httpd_uri_t devices_page = {.uri = "/devices", .method = HTTP_GET, .handler = devices_handler};
-        httpd_register_uri_handler(server, &devices_page);
-        
-        httpd_uri_t styles = {.uri = "/styles.css", .method = HTTP_GET, .handler = styles_handler};
-        httpd_register_uri_handler(server, &styles);
-        
-        httpd_uri_t script = {.uri = "/script.js", .method = HTTP_GET, .handler = script_handler};
-        httpd_register_uri_handler(server, &script);
-        
-        httpd_uri_t favicon = {.uri = "/favicon.ico", .method = HTTP_GET, .handler = favicon_handler};
-        httpd_register_uri_handler(server, &favicon);
-        
-        // Register API handlers
-        httpd_uri_t api_config_get = {.uri = "/api/config", .method = HTTP_GET, .handler = api_config_get_handler};
-        httpd_register_uri_handler(server, &api_config_get);
-        
-        httpd_uri_t api_config_post = {.uri = "/api/config", .method = HTTP_POST, .handler = api_config_post_handler};
-        httpd_register_uri_handler(server, &api_config_post);
-        
-        httpd_uri_t api_nodes = {.uri = "/api/nodes", .method = HTTP_GET, .handler = api_nodes_handler};
-        httpd_register_uri_handler(server, &api_nodes);
-        
-        httpd_uri_t api_routes = {.uri = "/api/routes", .method = HTTP_GET, .handler = api_routes_handler};
-        httpd_register_uri_handler(server, &api_routes);
-        
-        // Add ping endpoint
-        httpd_uri_t api_ping = {.uri = "/api/ping", .method = HTTP_POST, .handler = api_ping_handler};
-        httpd_register_uri_handler(server, &api_ping);
-        // Add NVS debug endpoint
-        httpd_uri_t api_debug_nvs = {.uri = "/api/debug/nvs", .method = HTTP_GET, .handler = api_debug_nvs_handler};
-        httpd_register_uri_handler(server, &api_debug_nvs);
-        
-        ESP_LOGI(TAG, "=== Web Server Started Successfully ===");
-        ESP_LOGI(TAG, "Access at: http://192.168.4.1");
-        ESP_LOGI(TAG, "Registered URIs: /, /config, /devices, /api/*");
-    } else {
-        ESP_LOGE(TAG, "Failed to start web server: %s", esp_err_to_name(ret));
-        ESP_LOGE(TAG, "Error code: %d", ret);
-    }
-}
-
-void web_server_stop(void) {
+// Stop web server
+void web_server_stop(httpd_handle_t server) {
     if (server) {
         httpd_stop(server);
-        server = NULL;
         ESP_LOGI(TAG, "Web server stopped");
     }
 }

@@ -6,7 +6,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>
-
+#include "mesh_manager.h"
+#include "mesh_types.h"
 static const char *TAG = "MESH_PROTOCOL";
 static lora_config_t *current_config;
 static uint16_t sequence_number = 0;
@@ -219,13 +220,13 @@ void mesh_self_healing_check(void) {
             node_info_t *next_hop = mesh_find_node(route->next_hop);
             if (!next_hop || !next_hop->online) {
                 ESP_LOGW(TAG, "Route to %d via %d is broken, initiating repair", 
-                        route->destination, route->next_hop);
+                        route->dest_id, route->next_hop);
                 
                 // Mark route as inactive
                 route->active = false;
                 
                 // Try to find alternative route
-                mesh_initiate_route_discovery(route->destination);
+                mesh_initiate_route_discovery(route->dest_id);
             }
         }
     }

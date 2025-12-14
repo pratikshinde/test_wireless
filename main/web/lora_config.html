@@ -4,75 +4,117 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoRa Configuration</title>
-    <link rel="stylesheet" href="/styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            border: 1px solid #e0e0e0;
+        }
+        .card-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            border-bottom: none;
+        }
+        .config-section {
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+        }
+        .config-section:not(:last-child) {
+            border-bottom: 1px solid #e9ecef;
+        }
+        .btn-save-section {
+            margin-top: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .btn-save-section:hover {
+            background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .form-label {
+            font-weight: 500;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        .form-control, .form-select {
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            padding: 8px 12px;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
+        }
+        h4 {
+            color: #343a40;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <!-- Navigation -->
-        <nav class="navbar">
-            <div class="nav-brand">
-                <i class="fas fa-satellite-dish"></i>
-                <span>LoRa Mesh Network</span>
+        <h4>LoRa Mesh Configuration</h4>
+        
+        <!-- Toast for notifications -->
+        <div id="toast" class="toast align-items-center text-white bg-success border-0" role="alert" style="display: none;">
+            <div class="d-flex">
+                <div class="toast-body" id="toast-message"></div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
-            <div class="nav-menu">
-                <a href="/" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                <a href="/config" class="nav-link active"><i class="fas fa-cog"></i> LoRa Config</a>
-                <a href="/devices" class="nav-link"><i class="fas fa-network-wired"></i> Devices</a>
-            </div>
-            <div class="nav-status">
-                <span class="status-indicator online"></span>
-                <span>Node <span id="nodeId">1</span></span>
-            </div>
-        </nav>
+        </div>
 
-        <!-- Configuration Content -->
-        <div class="config-container">
-            <h1><i class="fas fa-cog"></i> LoRa Configuration</h1>
-            
-            <div class="config-tabs">
-                <button class="tab-btn active" onclick="showTab('basic')">Basic Settings</button>
-                <button class="tab-btn" onclick="showTab('advanced')">Advanced Settings</button>
-                <button class="tab-btn" onclick="showTab('network')">Network Settings</button>
-                <button class="tab-btn" onclick="showTab('security')">Security</button>
+        <!-- Device Identification Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Device Identification</h5>
             </div>
-
-            <!-- Basic Settings Tab -->
-            <div id="basic-tab" class="tab-content active">
-                <div class="config-section">
-                    <h3><i class="fas fa-microchip"></i> Node Identity</h3>
-                    <div class="form-group">
-                        <label for="nodeId">Node ID:</label>
-                        <select id="nodeIdSelect">
-                            <option value="1">1 (Master)</option>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
-                            <option value="5">5</option>
-                        </select>
-                        <small>ID 1 is Master, others are Slaves</small>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="node_id" class="form-label">Node ID</label>
+                            <input type="number" class="form-control" id="node_id" min="1" max="255">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="nodeName">Node Name:</label>
-                        <input type="text" id="nodeName" placeholder="Enter node name">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="node_name" class="form-label">Node Name</label>
+                            <input type="text" class="form-control" id="node_name" maxlength="31">
+                        </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div class="config-section">
-                    <h3><i class="fas fa-wave-square"></i> LoRa Parameters</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="frequency">Frequency (MHz):</label>
-                            <select id="frequency">
-                                <option value="433000000">433 MHz</option>
-                                <option value="868000000">868 MHz</option>
-                                <option value="915000000">915 MHz</option>
-                                <option value="866400000">866.4 MHz</option>
-                            </select>
+        <!-- Radio Settings Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Radio Settings</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="frequency" class="form-label">Frequency (Hz)</label>
+                            <input type="number" class="form-control" id="frequency" min="137000000" max="1020000000">
                         </div>
-                        <div class="form-group">
-                            <label for="spreadingFactor">Spreading Factor:</label>
-                            <select id="spreadingFactor">
+                        <div class="mb-3">
+                            <label for="spreading_factor" class="form-label">Spreading Factor</label>
+                            <select class="form-select" id="spreading_factor">
                                 <option value="7">SF7 (Fastest)</option>
                                 <option value="8">SF8</option>
                                 <option value="9">SF9</option>
@@ -81,11 +123,9 @@
                                 <option value="12">SF12 (Longest Range)</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="bandwidth">Bandwidth:</label>
-                            <select id="bandwidth">
+                        <div class="mb-3">
+                            <label for="bandwidth" class="form-label">Bandwidth</label>
+                            <select class="form-select" id="bandwidth">
                                 <option value="7800">7.8 kHz</option>
                                 <option value="10400">10.4 kHz</option>
                                 <option value="15600">15.6 kHz</option>
@@ -93,347 +133,475 @@
                                 <option value="31250">31.25 kHz</option>
                                 <option value="41700">41.7 kHz</option>
                                 <option value="62500">62.5 kHz</option>
-                                <option value="125000">125 kHz</option>
+                                <option value="125000" selected>125 kHz</option>
                                 <option value="250000">250 kHz</option>
+                                <option value="500000">500 kHz</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label for="codingRate">Coding Rate:</label>
-                            <select id="codingRate">
-                                <option value="5">4/5 (Most efficient)</option>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="coding_rate" class="form-label">Coding Rate</label>
+                            <select class="form-select" id="coding_rate">
+                                <option value="5">4/5</option>
                                 <option value="6">4/6</option>
                                 <option value="7">4/7</option>
-                                <option value="8">4/8 (Most robust)</option>
+                                <option value="8">4/8</option>
                             </select>
                         </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="txPower">TX Power: <span id="txPowerValue">17 dBm</span></label>
-                        <input type="range" id="txPower" min="2" max="20" step="1" value="17">
+                        <div class="mb-3">
+                            <label for="tx_power" class="form-label">TX Power (dBm)</label>
+                            <select class="form-select" id="tx_power">
+                                <option value="2">2 dBm</option>
+                                <option value="5">5 dBm</option>
+                                <option value="8">8 dBm</option>
+                                <option value="11">11 dBm</option>
+                                <option value="14">14 dBm</option>
+                                <option value="17" selected>17 dBm</option>
+                                <option value="20">20 dBm</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="sync_word" class="form-label">Sync Word (Hex)</label>
+                            <input type="text" class="form-control" id="sync_word" pattern="^0x[0-9A-Fa-f]{2}$" placeholder="0x12">
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Advanced Settings Tab -->
-            <div id="advanced-tab" class="tab-content">
-                <div class="config-section">
-                    <h3><i class="fas fa-sliders-h"></i> Advanced LoRa Settings</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="syncWord">Sync Word:</label>
-                            <input type="text" id="syncWord" value="0x12">
-                            <small>0x12 (private) or 0x34 (public)</small>
-                        </div>
-                        <div class="form-group">
-                            <label for="preambleLength">Preamble Length:</label>
-                            <input type="number" id="preambleLength" min="6" max="65535" value="8">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="preamble_length" class="form-label">Preamble Length</label>
+                            <input type="number" class="form-control" id="preamble_length" min="6" max="65535" value="8">
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enableCrc"> Enable CRC
-                            </label>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="symbol_timeout" class="form-label">Symbol Timeout</label>
+                            <input type="number" class="form-control" id="symbol_timeout" min="0" max="1023" value="5">
                         </div>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enableLdro"> Low Data Rate Optimize
-                            </label>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="symbolTimeout">Symbol Timeout:</label>
-                        <input type="number" id="symbolTimeout" min="0" max="1023" value="5">
                     </div>
                 </div>
-            </div>
-
-            <!-- Network Settings Tab -->
-            <div id="network-tab" class="tab-content">
-                <div class="config-section">
-                    <h3><i class="fas fa-network-wired"></i> Network Settings</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="pingInterval">Ping Interval (seconds):</label>
-                            <input type="number" id="pingInterval" min="5" max="3600" value="30">
-                        </div>
-                        <div class="form-group">
-                            <label for="beaconInterval">Beacon Interval (seconds):</label>
-                            <input type="number" id="beaconInterval" min="10" max="600" value="60">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enable_crc">
+                            <label class="form-check-label" for="enable_crc">Enable CRC</label>
                         </div>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="routeTimeout">Route Timeout (seconds):</label>
-                            <input type="number" id="routeTimeout" min="30" max="3600" value="300">
+                    <div class="col-md-6">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enable_ldro">
+                            <label class="form-check-label" for="enable_ldro">Enable LDRO (Low Data Rate Optimize)</label>
                         </div>
-                        <div class="form-group">
-                            <label for="maxHops">Maximum Hops:</label>
-                            <input type="number" id="maxHops" min="1" max="10" value="5">
-                        </div>
-                    </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enableAck"> Enable ACK
-                            </label>
-                        </div>
-                        <div class="form-group">
-                            <label>
-                                <input type="checkbox" id="enableSelfHealing"> Enable Self-Healing
-                            </label>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label for="ackTimeout">ACK Timeout (ms):</label>
-                        <input type="number" id="ackTimeout" min="100" max="10000" value="1000">
                     </div>
                 </div>
-            </div>
-
-            <!-- Security Tab -->
-            <div id="security-tab" class="tab-content">
-                <div class="config-section">
-                    <h3><i class="fas fa-shield-alt"></i> Security Settings</h3>
-                    <div class="form-group">
-                        <label>
-                            <input type="checkbox" id="enableEncryption"> Enable AES Encryption
-                        </label>
-                    </div>
-                    <div class="form-group">
-                        <label for="aesKey">AES Key (Hex):</label>
-                        <input type="text" id="aesKey" value="00112233445566778899AABBCCDDEEFF">
-                    </div>
-                    <div class="form-group">
-                        <label for="iv">Initialization Vector (Hex):</label>
-                        <input type="text" id="iv" value="000102030405060708090A0B0C0D0E0F">
-                    </div>
-                    <div class="form-group">
-                        <label for="wifiPassword">WiFi Password:</label>
-                        <input type="password" id="wifiPassword" placeholder="Enter WiFi password">
-                    </div>
+                <div class="d-grid">
+                    <button type="button" class="btn btn-save-section" onclick="saveRadioSettings()">Save Radio Settings</button>
                 </div>
             </div>
+        </div>
 
-            <!-- Action Buttons -->
-            <div class="action-bar">
-                <button class="btn btn-primary" onclick="saveConfig()">
-                    <i class="fas fa-save"></i> Save Configuration
+        <!-- Network Settings Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Network Settings</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="ping_interval" class="form-label">Ping Interval (seconds)</label>
+                            <input type="number" class="form-control" id="ping_interval" min="10" max="3600">
+                        </div>
+                        <div class="mb-3">
+                            <label for="beacon_interval" class="form-label">Beacon Interval (seconds)</label>
+                            <input type="number" class="form-control" id="beacon_interval" min="30" max="3600">
+                        </div>
+                        <div class="mb-3">
+                            <label for="route_timeout" class="form-label">Route Timeout (seconds)</label>
+                            <input type="number" class="form-control" id="route_timeout" min="60" max="86400">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="max_hops" class="form-label">Maximum Hops</label>
+                            <select class="form-select" id="max_hops">
+                                <option value="1">1 Hop</option>
+                                <option value="2">2 Hops</option>
+                                <option value="3">3 Hops</option>
+                                <option value="4">4 Hops</option>
+                                <option value="5" selected>5 Hops</option>
+                                <option value="6">6 Hops</option>
+                                <option value="7">7 Hops</option>
+                                <option value="8">8 Hops</option>
+                                <option value="9">9 Hops</option>
+                                <option value="10">10 Hops</option>
+                            </select>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enable_ack">
+                            <label class="form-check-label" for="enable_ack">Enable ACK (Acknowledgement)</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="ack_timeout" class="form-label">ACK Timeout (ms)</label>
+                            <input type="number" class="form-control" id="ack_timeout" min="100" max="10000">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enable_self_healing">
+                            <label class="form-check-label" for="enable_self_healing">Enable Self Healing</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="healing_timeout" class="form-label">Healing Timeout (seconds)</label>
+                            <input type="number" class="form-control" id="healing_timeout" min="10" max="3600">
+                        </div>
+                    </div>
+                </div>
+                <div class="d-grid">
+                    <button type="button" class="btn btn-save-section" onclick="saveNetworkSettings()">Save Network Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- WiFi Settings Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">WiFi Settings</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="wifi_ssid" class="form-label">WiFi SSID</label>
+                            <input type="text" class="form-control" id="wifi_ssid" maxlength="31">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="wifi_password" class="form-label">WiFi Password</label>
+                            <input type="password" class="form-control" id="wifi_password" maxlength="63">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enable_web_server">
+                            <label class="form-check-label" for="enable_web_server">Enable Web Server</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="web_port" class="form-label">Web Server Port</label>
+                            <input type="number" class="form-control" id="web_port" min="1" max="65535">
+                        </div>
+                    </div>
+                </div>
+                <div class="d-grid">
+                    <button type="button" class="btn btn-save-section" onclick="saveWiFiSettings()">Save WiFi Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Settings Card -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Security Settings</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="enable_encryption">
+                            <label class="form-check-label" for="enable_encryption">Enable AES Encryption</label>
+                        </div>
+                        <div class="mb-3">
+                            <label for="aes_key" class="form-label">AES Key (32 hex characters)</label>
+                            <input type="text" class="form-control" id="aes_key" pattern="^[0-9A-Fa-f]{32}$" 
+                                   placeholder="A96ED70C...7CFC6294" maxlength="32">
+                            <small class="text-muted">Enter 32-character hex key (16 bytes)</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="iv" class="form-label">Initialization Vector (32 hex characters)</label>
+                            <input type="text" class="form-control" id="iv" pattern="^[0-9A-Fa-f]{32}$" 
+                                   placeholder="0123456789ABCDEF..." maxlength="32">
+                            <small class="text-muted">Enter 32-character hex IV (16 bytes)</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-grid">
+                    <button type="button" class="btn btn-save-section" onclick="saveSecuritySettings()">Save Security Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Save All Button -->
+        <div class="card">
+            <div class="card-body text-center">
+                <button type="button" class="btn btn-primary btn-lg" onclick="saveAllSettings()" style="padding: 12px 40px;">
+                    Save All Settings
                 </button>
-                <button class="btn btn-secondary" onclick="loadConfig()">
-                    <i class="fas fa-sync"></i> Reload
+                <button type="button" class="btn btn-outline-secondary btn-lg ms-3" onclick="loadCurrentSettings()" style="padding: 12px 40px;">
+                    Reload Settings
                 </button>
-                <button class="btn btn-danger" onclick="resetConfig()">
-                    <i class="fas fa-trash"></i> Reset to Defaults
-                </button>
-                <button class="btn btn-success" onclick="applyConfig()">
-                    <i class="fas fa-bolt"></i> Apply Now
-                </button>
-                <button class="btn btn-warning" onclick="debugNVS()">
-                    <i class="fas fa-bug"></i> Debug NVS
+                <button type="button" class="btn btn-outline-danger btn-lg ms-3" onclick="resetToDefaults()" style="padding: 12px 40px;">
+                    Reset to Defaults
                 </button>
             </div>
-
-            <!-- Status Message -->
-            <div id="statusMessage" class="status-message"></div>
         </div>
     </div>
 
-    <script src="/script.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
     <script>
-        // Tab switching
-        function showTab(tabName) {
-            // Hide all tabs
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            document.querySelectorAll('.tab-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
+        // Toast notification function
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
             
-            // Show selected tab
-            document.getElementById(tabName + '-tab').classList.add('active');
-            event.target.classList.add('active');
-        }
-        //Debug NVS
-        async function debugNVS() {
-        try {
-            const response = await fetch('/api/debug/nvs');
-            const result = await response.json();
-            if (result.success) {
-                showStatus('NVS debug sent to serial console', 'success');
-                alert('Check serial monitor for NVS debug output');
+            toastMessage.textContent = message;
+            toast.className = `toast align-items-center text-white border-0 show`;
+            
+            if (type === 'success') {
+                toast.classList.add('bg-success');
+            } else if (type === 'error') {
+                toast.classList.add('bg-danger');
+            } else if (type === 'warning') {
+                toast.classList.add('bg-warning');
             }
-        } catch (error) {
-            console.error('Error debugging NVS:', error);
-            showStatus('Error debugging NVS', 'error');
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
         }
-    }
-        // Load current configuration
-        async function loadConfig() {
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
-                
-                // Basic settings
-                document.getElementById('nodeIdSelect').value = config.node_id;
-                document.getElementById('nodeName').value = config.node_name;
-                
-                // LoRa settings
-                document.getElementById('frequency').value = config.frequency;
-                document.getElementById('spreadingFactor').value = config.spreading_factor;
-                document.getElementById('bandwidth').value = config.bandwidth;
-                document.getElementById('codingRate').value = config.coding_rate;
-                document.getElementById('txPower').value = config.tx_power;
-                document.getElementById('txPowerValue').textContent = config.tx_power + ' dBm';
-                
-                // Advanced settings
-                document.getElementById('syncWord').value = '0x' + config.sync_word.toString(16).padStart(2, '0');
-                document.getElementById('preambleLength').value = config.preamble_length;
-                document.getElementById('enableCrc').checked = config.enable_crc;
-                document.getElementById('enableLdro').checked = config.enable_ldro;
-                document.getElementById('symbolTimeout').value = config.symbol_timeout;
-                
-                // Network settings
-                document.getElementById('pingInterval').value = config.ping_interval;
-                document.getElementById('beaconInterval').value = config.beacon_interval;
-                document.getElementById('routeTimeout').value = config.route_timeout;
-                document.getElementById('maxHops').value = config.max_hops;
-                document.getElementById('enableAck').checked = config.enable_ack;
-                document.getElementById('enableSelfHealing').checked = config.enable_self_healing;
-                document.getElementById('ackTimeout').value = config.ack_timeout;
-                
-                // Security settings
-                document.getElementById('enableEncryption').checked = config.enable_encryption;
-                
-                showStatus('Configuration loaded successfully', 'success');
-                
-            } catch (error) {
-                console.error('Error loading config:', error);
-                showStatus('Error loading configuration', 'error');
-            }
+
+        // Load current settings from device
+        function loadCurrentSettings() {
+            fetch('/api/config')
+                .then(response => response.json())
+                .then(data => {
+                    // Device Identification
+                    document.getElementById('node_id').value = data.node_id || 1;
+                    document.getElementById('node_name').value = data.node_name || 'LoRa-Node';
+                    
+                    // Radio Settings
+                    document.getElementById('frequency').value = data.frequency || 868000000;
+                    document.getElementById('spreading_factor').value = data.spreading_factor || 7;
+                    document.getElementById('bandwidth').value = data.bandwidth || 125000;
+                    document.getElementById('coding_rate').value = data.coding_rate || 5;
+                    document.getElementById('tx_power').value = data.tx_power || 17;
+                    document.getElementById('sync_word').value = '0x' + (data.sync_word || 0x12).toString(16).toUpperCase();
+                    document.getElementById('preamble_length').value = data.preamble_length || 8;
+                    document.getElementById('symbol_timeout').value = data.symbol_timeout || 5;
+                    document.getElementById('enable_crc').checked = data.enable_crc || true;
+                    document.getElementById('enable_ldro').checked = data.enable_ldro || true;
+                    
+                    // Network Settings
+                    document.getElementById('ping_interval').value = data.ping_interval || 30;
+                    document.getElementById('beacon_interval').value = data.beacon_interval || 60;
+                    document.getElementById('route_timeout').value = data.route_timeout || 300;
+                    document.getElementById('max_hops').value = data.max_hops || 5;
+                    document.getElementById('enable_ack').checked = data.enable_ack || true;
+                    document.getElementById('ack_timeout').value = data.ack_timeout || 1000;
+                    document.getElementById('enable_self_healing').checked = data.enable_self_healing || false;
+                    document.getElementById('healing_timeout').value = data.healing_timeout || 30;
+                    
+                    // WiFi Settings
+                    document.getElementById('wifi_ssid').value = data.wifi_ssid || 'LoRa-Mesh';
+                    document.getElementById('wifi_password').value = data.wifi_password || '';
+                    document.getElementById('enable_web_server').checked = data.enable_web_server || false;
+                    document.getElementById('web_port').value = data.web_port || 80;
+                    
+                    // Security Settings
+                    document.getElementById('enable_encryption').checked = data.enable_encryption || false;
+                    document.getElementById('aes_key').value = data.aes_key || '';
+                    document.getElementById('iv').value = data.iv || '';
+                    
+                    showToast('Settings loaded successfully!');
+                })
+                .catch(error => {
+                    console.error('Error loading settings:', error);
+                    showToast('Failed to load settings', 'error');
+                });
         }
-        
-        // Save configuration
-        async function saveConfig() {
-            const config = {
-                // Node Identity
-                node_id: parseInt(document.getElementById('nodeIdSelect').value),
-                node_name: document.getElementById('nodeName').value,
-                
-                // LoRa Parameters - MUST INCLUDE THESE
+
+        // Save Radio Settings
+        function saveRadioSettings() {
+            const settings = {
                 frequency: parseInt(document.getElementById('frequency').value),
-                spreading_factor: parseInt(document.getElementById('spreadingFactor').value), // THIS ONE!
+                spreading_factor: parseInt(document.getElementById('spreading_factor').value),
                 bandwidth: parseInt(document.getElementById('bandwidth').value),
-                coding_rate: parseInt(document.getElementById('codingRate').value),
-                tx_power: parseInt(document.getElementById('txPower').value),
-                
-                // Encryption - MUST INCLUDE THIS
-                enable_encryption: document.getElementById('enableEncryption').checked,
-                
-                // Advanced settings
-                sync_word: parseInt(document.getElementById('syncWord').value, 16),
-                preamble_length: parseInt(document.getElementById('preambleLength').value),
-                enable_crc: document.getElementById('enableCrc').checked,
-                enable_ldro: document.getElementById('enableLdro').checked,
-                symbol_timeout: parseInt(document.getElementById('symbolTimeout').value),
-                
-                // Network settings
-                ping_interval: parseInt(document.getElementById('pingInterval').value),
-                beacon_interval: parseInt(document.getElementById('beaconInterval').value),
-                route_timeout: parseInt(document.getElementById('routeTimeout').value),
-                max_hops: parseInt(document.getElementById('maxHops').value),
-                enable_ack: document.getElementById('enableAck').checked,
-                enable_self_healing: document.getElementById('enableSelfHealing').checked,
-                ack_timeout: parseInt(document.getElementById('ackTimeout').value),
-                
-                // Web server
-                enable_web_server: true,  // Always true
-                web_port: 80
+                coding_rate: parseInt(document.getElementById('coding_rate').value),
+                tx_power: parseInt(document.getElementById('tx_power').value),
+                sync_word: parseInt(document.getElementById('sync_word').value.replace('0x', ''), 16),
+                preamble_length: parseInt(document.getElementById('preamble_length').value),
+                symbol_timeout: parseInt(document.getElementById('symbol_timeout').value),
+                enable_crc: document.getElementById('enable_crc').checked,
+                enable_ldro: document.getElementById('enable_ldro').checked
             };
             
-            console.log("Saving config:", config);
-            console.log("Spreading Factor:", config.spreading_factor);
-            console.log("Encryption:", config.enable_encryption);
-            
-            try {
-                const response = await fetch('/api/config', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(config)
-                });
-                
-                const result = await response.json();
-                console.log("Save result:", result);
-                
-                if (result.success) {
-                    showStatus(`Configuration saved! SF=${result.spreading_factor}, Enc=${result.enable_encryption ? 'On' : 'Off'}`, 'success');
-                } else {
-                    showStatus('Error saving configuration', 'error');
-                }
-            } catch (error) {
-                console.error('Error saving config:', error);
-                showStatus('Error saving configuration: ' + error.message, 'error');
-            }
+            saveSettingsSection('/api/config/radio', settings, 'Radio settings');
         }
-        
-        // Apply configuration immediately
-        async function applyConfig() {
-            // First save, then apply
-            await saveConfig();
+
+        // Save Network Settings
+        function saveNetworkSettings() {
+            const settings = {
+                ping_interval: parseInt(document.getElementById('ping_interval').value),
+                beacon_interval: parseInt(document.getElementById('beacon_interval').value),
+                route_timeout: parseInt(document.getElementById('route_timeout').value),
+                max_hops: parseInt(document.getElementById('max_hops').value),
+                enable_ack: document.getElementById('enable_ack').checked,
+                ack_timeout: parseInt(document.getElementById('ack_timeout').value),
+                enable_self_healing: document.getElementById('enable_self_healing').checked,
+                healing_timeout: parseInt(document.getElementById('healing_timeout').value)
+            };
             
-            try {
-                const response = await fetch('/api/config/apply', {method: 'POST'});
-                const result = await response.json();
-                if (result.success) {
-                    showStatus('Configuration applied successfully', 'success');
-                } else {
-                    showStatus('Error applying configuration', 'error');
-                }
-            } catch (error) {
-                console.error('Error applying config:', error);
-                showStatus('Error applying configuration', 'error');
-            }
+            saveSettingsSection('/api/config/network', settings, 'Network settings');
         }
-        
-        // Reset to defaults
-        async function resetConfig() {
-            if (confirm('Are you sure you want to reset to defaults?')) {
-                try {
-                    const response = await fetch('/api/config/reset', {method: 'POST'});
-                    const result = await response.json();
-                    if (result.success) {
-                        showStatus('Configuration reset to defaults', 'success');
-                        setTimeout(() => location.reload(), 2000);
+
+        // Save WiFi Settings
+        function saveWiFiSettings() {
+            const settings = {
+                wifi_ssid: document.getElementById('wifi_ssid').value,
+                wifi_password: document.getElementById('wifi_password').value,
+                enable_web_server: document.getElementById('enable_web_server').checked,
+                web_port: parseInt(document.getElementById('web_port').value)
+            };
+            
+            saveSettingsSection('/api/config/wifi', settings, 'WiFi settings');
+        }
+
+        // Save Security Settings
+        function saveSecuritySettings() {
+            const settings = {
+                enable_encryption: document.getElementById('enable_encryption').checked,
+                aes_key: document.getElementById('aes_key').value,
+                iv: document.getElementById('iv').value
+            };
+            
+            saveSettingsSection('/api/config/security', settings, 'Security settings');
+        }
+
+        // Generic function to save settings section
+        function saveSettingsSection(endpoint, settings, sectionName) {
+            fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(settings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(`${sectionName} saved successfully!`);
+                } else {
+                    showToast(`Failed to save ${sectionName.toLowerCase()}: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error(`Error saving ${sectionName}:`, error);
+                showToast(`Failed to save ${sectionName.toLowerCase()}`, 'error');
+            });
+        }
+
+        // Save all settings at once
+        function saveAllSettings() {
+            // Collect all settings from all sections
+            const allSettings = {
+                // Device Identification
+                node_id: parseInt(document.getElementById('node_id').value),
+                node_name: document.getElementById('node_name').value,
+                
+                // Radio Settings
+                frequency: parseInt(document.getElementById('frequency').value),
+                spreading_factor: parseInt(document.getElementById('spreading_factor').value),
+                bandwidth: parseInt(document.getElementById('bandwidth').value),
+                coding_rate: parseInt(document.getElementById('coding_rate').value),
+                tx_power: parseInt(document.getElementById('tx_power').value),
+                sync_word: parseInt(document.getElementById('sync_word').value.replace('0x', ''), 16),
+                preamble_length: parseInt(document.getElementById('preamble_length').value),
+                symbol_timeout: parseInt(document.getElementById('symbol_timeout').value),
+                enable_crc: document.getElementById('enable_crc').checked,
+                enable_ldro: document.getElementById('enable_ldro').checked,
+                
+                // Network Settings
+                ping_interval: parseInt(document.getElementById('ping_interval').value),
+                beacon_interval: parseInt(document.getElementById('beacon_interval').value),
+                route_timeout: parseInt(document.getElementById('route_timeout').value),
+                max_hops: parseInt(document.getElementById('max_hops').value),
+                enable_ack: document.getElementById('enable_ack').checked,
+                ack_timeout: parseInt(document.getElementById('ack_timeout').value),
+                enable_self_healing: document.getElementById('enable_self_healing').checked,
+                healing_timeout: parseInt(document.getElementById('healing_timeout').value),
+                
+                // WiFi Settings
+                wifi_ssid: document.getElementById('wifi_ssid').value,
+                wifi_password: document.getElementById('wifi_password').value,
+                enable_web_server: document.getElementById('enable_web_server').checked,
+                web_port: parseInt(document.getElementById('web_port').value),
+                
+                // Security Settings
+                enable_encryption: document.getElementById('enable_encryption').checked,
+                aes_key: document.getElementById('aes_key').value,
+                iv: document.getElementById('iv').value
+            };
+            
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(allSettings)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('All settings saved successfully!');
+                } else {
+                    showToast(`Failed to save settings: ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving all settings:', error);
+                showToast('Failed to save all settings', 'error');
+            });
+        }
+
+        // Reset to default settings
+        function resetToDefaults() {
+            if (confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) {
+                fetch('/api/config/reset', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('Settings reset to defaults!');
+                        // Reload the default values
+                        setTimeout(loadCurrentSettings, 1000);
+                    } else {
+                        showToast('Failed to reset settings', 'error');
                     }
-                } catch (error) {
-                    console.error('Error resetting config:', error);
-                    showStatus('Error resetting configuration', 'error');
-                }
+                })
+                .catch(error => {
+                    console.error('Error resetting settings:', error);
+                    showToast('Failed to reset settings', 'error');
+                });
             }
         }
-        
-        // Show status message
-        function showStatus(message, type) {
-            const statusDiv = document.getElementById('statusMessage');
-            statusDiv.textContent = message;
-            statusDiv.className = `status-message ${type}`;
-            
-            setTimeout(() => {
-                statusDiv.textContent = '';
-                statusDiv.className = 'status-message';
-            }, 5000);
-        }
-        
-        // TX Power slider update
-        document.getElementById('txPower').addEventListener('input', function() {
-            document.getElementById('txPowerValue').textContent = this.value + ' dBm';
-        });
-        
-        // Initialize on load
-        document.addEventListener('DOMContentLoaded', function() {
-            loadConfig();
-        });
+
+        // Load settings when page loads
+        document.addEventListener('DOMContentLoaded', loadCurrentSettings);
     </script>
 </body>
 </html>

@@ -40,7 +40,7 @@ bool lora_mesh_init(lora_config_t *config) {
     
     // Configure LoRa parameters
     rfm95w_set_frequency(config->frequency);
-    rfm95w_set_spreading_factor(config->spreading_factor);
+    rfm95w_set_spreading_factor(config->spread_factor);
     rfm95w_set_bandwidth(config->bandwidth);
     rfm95w_set_coding_rate(config->coding_rate);
     rfm95w_set_tx_power(config->tx_power);
@@ -64,7 +64,7 @@ bool lora_mesh_init(lora_config_t *config) {
     
     ESP_LOGI(TAG, "LoRa initialized: %.1fMHz SF%d BW:%lu CR:4/%d %ddBm",
              config->frequency / 1000000.0,
-             config->spreading_factor,
+             config->spread_factor,
              config->bandwidth,
              config->coding_rate,
              config->tx_power);
