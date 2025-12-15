@@ -1,79 +1,863 @@
-// Common JavaScript functions for all pages
-// script.js - COMPLETE FIXED VERSION
-
-// Utility functions
-function showToast(message, type = 'info') {
-    // Remove existing toast
-    const existingToast = document.getElementById('global-toast');
-    if (existingToast) {
-        existingToast.remove();
+// script.js - ESP32 LoRa Mesh Web Interface
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('ESP32 LoRa Mesh Interface loaded');
+    
+    // Check which page we're on and initialize accordingly
+    const path = window.location.pathname;
+    
+    if (path === '/' || path === '/dashboard.html') {
+        initDashboard();
+    } else if (path === '/lora-config.html') {
+        initConfigPage();
+    } else if (path === '/devices.html') {
+        initDevicesPage();
     }
     
-    // Create new toast
-    const toast = document.createElement('div');
-    toast.id = 'global-toast';
-    toast.className = `toast toast-${type}`;
-    toast.innerHTML = `
-        <span>${message}</span>
-        <button onclick="this.parentElement.remove()">&times;</button>
-    `;
+    // Common initialization
+    initCommon();
+});
+
+// ==================== COMMON FUNCTIONS ====================
+
+function initCommon() {
+    // Update navigation active state
+    updateActiveNav();
     
-    document.body.appendChild(toast);
-    
-    // Show toast
-    setTimeout(() => {
-        toast.classList.add('show');
-    }, 10);
-    
-    // Auto-remove after 5 seconds
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => {
-            if (toast.parentElement) {
-                toast.remove();
+    // Initialize logout button if exists
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', function() {
+            if (confirm('Are you sure you want to logout?')) {
+                window.location.href = '/logout';
             }
-        }, 300);
-    }, 5000);
+        });
+    }
+    
+    // Initialize status indicator
+    updateConnectionStatus();
+    
+    // Periodically update status
+    setInterval(updateConnectionStatus, 10000);
 }
 
-// Format time difference from microseconds to human readable
-function formatTimeDifference(microseconds) {
-    const seconds = Math.floor(microseconds / 1000000);
+function updateActiveNav() {
+    const path = window.location.pathname;
+    const navLinks = document.querySelectorAll('.nav-link');
     
-    if (seconds < 60) {
-        return `${seconds} seconds ago`;
-    } else if (seconds < 3600) {
-        const minutes = Math.floor(seconds / 60);
-        return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-    } else if (seconds < 86400) {
-        const hours = Math.floor(seconds / 3600);
-        return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    } else {
-        const days = Math.floor(seconds / 86400);
-        return `${days} day${days > 1 ? 's' : ''} ago`;
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+        const linkPath = link.getAttribute('href');
+        
+        if ((path === '/' && linkPath === '/dashboard.html') ||
+            (path === linkPath) ||
+            (path.includes('dashboard') && linkPath === '/dashboard.html')) {
+            link.classList.add('active');
+        } else if (path.includes('lora-config') && linkPath === '/lora-config.html') {
+            link.classList.add('active');
+        } else if (path.includes('devices') && linkPath === '/devices.html') {
+            link.classList.add('active');
+        }
+    });
+}
+
+function updateConnectionStatus() {
+    // Check if we're connected to ESP32 AP
+    fetch('/api/test', { 
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            setStatus('connected', 'Connected to ESP32');
+            return response.json();
+        } else {
+            setStatus('disconnected', 'Not connected to ESP32');
+            throw new Error('Network error');
+        }
+    })
+    .then(data => {
+        if (data && data.success) {
+            document.getElementById('systemUptime')?.textContent = 
+                formatUptime(data.data.uptime);
+            document.getElementById('systemVersion')?.textContent = 
+                data.data.version || '1.0.0';
+        }
+    })
+    .catch(error => {
+        console.log('Connection check failed:', error);
+        setStatus('disconnected', 'Not connected to ESP32');
+    });
+}
+
+function setStatus(status, message) {
+    const statusEl = document.getElementById('connectionStatus');
+    const messageEl = document.getElementById('statusMessage');
+    
+    if (statusEl) {
+        statusEl.className = 'status-indicator ' + status;
+        statusEl.textContent = status === 'connected' ? '●' : '○';
+    }
+    
+    if (messageEl) {
+        messageEl.textContent = message;
     }
 }
 
-// Format uptime from microseconds
-function formatUptime(microseconds) {
-    const seconds = Math.floor(microseconds / 1000000);
+function formatUptime(seconds) {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = seconds % 60;
     
-    if (days > 0) {
-        return `${days}d ${hours}h ${minutes}m`;
-    } else if (hours > 0) {
-        return `${hours}h ${minutes}m ${secs}s`;
-    } else if (minutes > 0) {
-        return `${minutes}m ${secs}s`;
-    } else {
-        return `${secs}s`;
+    if (days > 0) return `${days}d ${hours}h`;
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    if (minutes > 0) return `${minutes}m ${secs}s`;
+    return `${secs}s`;
+}
+
+function showToast(message, type = 'info') {
+    // Remove existing toasts
+    const existingToasts = document.querySelectorAll('.toast');
+    existingToasts.forEach(toast => toast.remove());
+    
+    // Create new toast
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `
+        <div class="toast-content">
+            <span class="toast-message">${message}</span>
+            <button class="toast-close">&times;</button>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Add close functionality
+    toast.querySelector('.toast-close').addEventListener('click', () => {
+        toast.remove();
+    });
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.remove();
+        }
+    }, 5000);
+}
+
+// ==================== DASHBOARD PAGE ====================
+
+function initDashboard() {
+    console.log('Initializing dashboard...');
+    
+    // Load initial data
+    loadNetworkStats();
+    loadNodeList();
+    
+    // Set up refresh intervals
+    setInterval(loadNetworkStats, 10000); // Every 10 seconds
+    setInterval(loadNodeList, 15000); // Every 15 seconds
+    
+    // Set up button event listeners
+    const pingBtn = document.getElementById('pingBtn');
+    if (pingBtn) {
+        pingBtn.addEventListener('click', sendPing);
+    }
+    
+    const discoverBtn = document.getElementById('discoverBtn');
+    if (discoverBtn) {
+        discoverBtn.addEventListener('click', discoverNodes);
+    }
+    
+    const rebootBtn = document.getElementById('rebootBtn');
+    if (rebootBtn) {
+        rebootBtn.addEventListener('click', rebootSystem);
     }
 }
 
-// Format bytes to human readable
+function loadNetworkStats() {
+    fetch('/api/nodes')
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                updateNetworkStats(data.data);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading network stats:', error);
+            showToast('Failed to load network stats', 'error');
+        });
+}
+
+function updateNetworkStats(data) {
+    // Update stats counters
+    document.getElementById('totalNodes')?.textContent = data.total || 0;
+    document.getElementById('onlineNodes')?.textContent = data.online || 0;
+    document.getElementById('offlineNodes')?.textContent = 
+        (data.total || 0) - (data.online || 0);
+    
+    // Update node list table
+    const tableBody = document.getElementById('nodeTableBody');
+    if (tableBody && data.nodes) {
+        tableBody.innerHTML = '';
+        
+        data.nodes.forEach(node => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${node.id}</td>
+                <td>${node.name || 'Unknown'}</td>
+                <td><span class="status-badge ${node.online ? 'online' : 'offline'}">
+                    ${node.online ? 'Online' : 'Offline'}
+                </span></td>
+                <td>${node.rssi || 0} dBm</td>
+                <td>${node.hops || 0}</td>
+                <td>${node.last_seen || 'Unknown'}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+}
+
+function loadNodeList() {
+    // This could be a separate endpoint for detailed node info
+    fetch('/api/nodes')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update any additional node visualizations
+                updateNodeVisualization(data.data.nodes);
+            }
+        })
+        .catch(error => console.error('Error loading node list:', error));
+}
+
+function updateNodeVisualization(nodes) {
+    const visualization = document.getElementById('nodeVisualization');
+    if (!visualization) return;
+    
+    // Simple visualization - could be enhanced with SVG/D3
+    let html = '<div class="node-visualization">';
+    
+    // Master node (ESP32 itself)
+    html += `
+        <div class="node-node master">
+            <div class="node-icon">🏠</div>
+            <div class="node-label">Master</div>
+            <div class="node-status online">Online</div>
+        </div>
+    `;
+    
+    // Child nodes
+    if (nodes && nodes.length > 0) {
+        nodes.forEach((node, index) => {
+            if (node.id !== 1) { // Skip master if included
+                const angle = (index * 360 / (nodes.length - 1)) * Math.PI / 180;
+                const distance = 100 + (node.hops || 0) * 50;
+                const x = 150 + Math.cos(angle) * distance;
+                const y = 150 + Math.sin(angle) * distance;
+                
+                html += `
+                    <div class="node-node child" style="left: ${x}px; top: ${y}px;">
+                        <div class="node-icon">📡</div>
+                        <div class="node-label">${node.name || `Node ${node.id}`}</div>
+                        <div class="node-status ${node.online ? 'online' : 'offline'}">
+                            ${node.online ? 'Online' : 'Offline'}
+                        </div>
+                        <div class="node-info">
+                            RSSI: ${node.rssi || 0}dBm<br>
+                            Hops: ${node.hops || 0}
+                        </div>
+                    </div>
+                    <svg class="node-connection" width="300" height="300">
+                        <line x1="150" y1="150" x2="${x + 25}" y2="${y + 25}" 
+                              stroke="${node.online ? '#4CAF50' : '#f44336'}" 
+                              stroke-width="2" stroke-dasharray="${node.hops > 1 ? '5,5' : '0'}"/>
+                    </svg>
+                `;
+            }
+        });
+    }
+    
+    html += '</div>';
+    visualization.innerHTML = html;
+}
+
+function sendPing() {
+    const pingBtn = document.getElementById('pingBtn');
+    if (pingBtn) {
+        pingBtn.disabled = true;
+        pingBtn.textContent = 'Pinging...';
+    }
+    
+    fetch('/api/ping', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Ping sent to network', 'success');
+                // Refresh node list after ping
+                setTimeout(loadNetworkStats, 2000);
+            } else {
+                showToast(data.message || 'Ping failed', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Ping error:', error);
+            showToast('Network error', 'error');
+        })
+        .finally(() => {
+            if (pingBtn) {
+                pingBtn.disabled = false;
+                pingBtn.textContent = 'Ping Network';
+            }
+        });
+}
+
+function discoverNodes() {
+    const discoverBtn = document.getElementById('discoverBtn');
+    if (discoverBtn) {
+        discoverBtn.disabled = true;
+        discoverBtn.textContent = 'Discovering...';
+    }
+    
+    fetch('/api/discover', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Network discovery started', 'success');
+                // Refresh after discovery
+                setTimeout(loadNetworkStats, 5000);
+            } else {
+                showToast(data.message || 'Discovery failed', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Discovery error:', error);
+            showToast('Network error', 'error');
+        })
+        .finally(() => {
+            if (discoverBtn) {
+                discoverBtn.disabled = false;
+                discoverBtn.textContent = 'Discover Nodes';
+            }
+        });
+}
+
+function rebootSystem() {
+    if (confirm('Are you sure you want to reboot the system?')) {
+        fetch('/api/reboot', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('System will reboot in 5 seconds...', 'warning');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 5000);
+                }
+            })
+            .catch(error => {
+                console.error('Reboot error:', error);
+                showToast('Reboot failed', 'error');
+            });
+    }
+}
+
+// ==================== CONFIGURATION PAGE ====================
+
+function initConfigPage() {
+    console.log('Initializing config page...');
+    
+    // Load current configuration
+    loadCurrentConfig();
+    
+    // Set up form submission
+    const configForm = document.getElementById('configForm');
+    if (configForm) {
+        configForm.addEventListener('submit', saveConfiguration);
+    }
+    
+    // Set up reset button
+    const resetBtn = document.getElementById('resetBtn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', resetToDefaults);
+    }
+    
+    // Initialize range value displays
+    initRangeDisplays();
+}
+
+function loadCurrentConfig() {
+    console.log('Loading configuration...');
+    
+    // Use the CORRECT endpoint that exists: /config (not /api/config)
+    fetch('/config', { 
+        method: 'GET',
+        headers: { 
+            'Accept': 'application/json',
+            'Cache-Control': 'no-cache'
+        }
+    })
+    .then(response => {
+        console.log('Response status:', response.status, response.statusText);
+        if (response.ok) {
+            return response.json();
+        } else {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+    })
+    .then(data => {
+        console.log('Received config data:', data);
+        if (data.success && data.data) {
+            populateConfigForm(data.data);
+            showToast('✅ Configuration loaded successfully', 'success');
+        } else {
+            console.error('Invalid response format:', data);
+            showToast('Failed to load configuration: Invalid response', 'error');
+            loadSampleConfig();
+        }
+    })
+    .catch(error => {
+        console.error('Error loading config:', error);
+        showToast('Failed to load configuration. Check console.', 'error');
+        loadSampleConfig();
+    });
+}
+
+function populateConfigForm(config) {
+    // Populate all form fields
+    const fields = [
+        'node_id', 'node_name', 'frequency', 'spread_factor', 'bandwidth',
+        'coding_rate', 'tx_power', 'sync_word', 'ping_interval', 'beacon_interval',
+        'route_timeout', 'max_hops', 'ack_timeout', 'healing_timeout',
+        'wifi_ssid', 'web_port', 'preamble_length', 'symbol_timeout'
+    ];
+    
+    fields.forEach(field => {
+        const element = document.getElementById(field);
+        if (element && config[field] !== undefined) {
+            if (element.type === 'checkbox') {
+                element.checked = Boolean(config[field]);
+            } else {
+                element.value = config[field];
+            }
+            
+            // Update any associated display elements
+            const displayElement = document.getElementById(field + 'Display');
+            if (displayElement) {
+                displayElement.textContent = config[field];
+            }
+        }
+    });
+    
+    // Handle boolean fields separately
+    const boolFields = ['enable_ack', 'enable_self_healing', 'enable_web_server', 
+                       'enable_encryption', 'enable_crc', 'enable_ldro'];
+    
+    boolFields.forEach(field => {
+        const element = document.getElementById(field);
+        if (element && config[field] !== undefined) {
+            element.checked = Boolean(config[field]);
+        }
+    });
+    
+    console.log('Configuration form populated');
+}
+
+function loadSampleConfig() {
+    // Sample configuration for testing
+    const sampleConfig = {
+        node_id: 1,
+        node_name: 'LoRa-Master',
+        frequency: 868.0,
+        spread_factor: 7,
+        bandwidth: 125,
+        coding_rate: 5,
+        tx_power: 17,
+        sync_word: 0x12,
+        ping_interval: 60,
+        beacon_interval: 30,
+        route_timeout: 300,
+        max_hops: 5,
+        enable_ack: true,
+        ack_timeout: 1000,
+        enable_self_healing: true,
+        healing_timeout: 60,
+        wifi_ssid: 'ESP32-LoRa-Mesh',
+        enable_web_server: true,
+        web_port: 80,
+        enable_encryption: false,
+        enable_crc: true,
+        enable_ldro: false,
+        preamble_length: 8,
+        symbol_timeout: 10
+    };
+    
+    populateConfigForm(sampleConfig);
+    showToast('Loaded sample configuration (real config unavailable)', 'warning');
+}
+
+function initRangeDisplays() {
+    // Update displays when range inputs change
+    const rangeInputs = document.querySelectorAll('input[type="range"]');
+    rangeInputs.forEach(input => {
+        input.addEventListener('input', function() {
+            const displayId = this.id + 'Display';
+            const displayElement = document.getElementById(displayId);
+            if (displayElement) {
+                displayElement.textContent = this.value;
+            }
+        });
+    });
+}
+
+function saveConfiguration(event) {
+    event.preventDefault();
+    console.log('Saving configuration...');
+    
+    const form = event.target;
+    const submitBtn = form.querySelector('button[type="submit"]');
+    
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Saving...';
+    }
+    
+    // Gather form data
+    const formData = {};
+    const formElements = form.elements;
+    
+    for (let element of formElements) {
+        if (element.name && element.type !== 'button' && element.type !== 'submit') {
+            if (element.type === 'checkbox') {
+                formData[element.name] = element.checked;
+                console.log(`${element.name}: ${element.checked ? 'true' : 'false'}`);
+            } else if (element.value !== undefined) {
+                formData[element.name] = element.value;
+                console.log(`${element.name}: ${element.value}`);
+            }
+        }
+    }
+    
+    console.log('Sending to server:', JSON.stringify(formData, null, 2));
+    
+    // Check if POST /api/config exists, otherwise try POST /config
+    fetch('/api/config', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify(formData)
+    })
+    .then(response => {
+        console.log('Save response status:', response.status, response.statusText);
+        if (!response.ok) {
+            console.log('POST /api/config failed, trying POST /config');
+            // Try POST /config as fallback
+            return fetch('/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+        }
+        return response;
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Save response data:', data);
+        if (data.success) {
+            showToast('✅ Configuration saved successfully!', 'success');
+            // Reload to verify
+            setTimeout(loadCurrentConfig, 1000);
+        } else {
+            showToast(`❌ Save failed: ${data.message || 'Unknown error'}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Save error:', error);
+        showToast(`❌ Save failed: ${error.message}`, 'error');
+        
+        // Try one more fallback - regular form submission
+        console.log('Trying form fallback...');
+        form.submit();
+    })
+    .finally(() => {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Save Configuration';
+        }
+    });
+}
+
+function resetToDefaults() {
+    if (confirm('Reset all settings to default values?')) {
+        fetch('/api/config/reset', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showToast('Configuration reset to defaults', 'success');
+                    // Reload the default config
+                    setTimeout(loadCurrentConfig, 1000);
+                }
+            })
+            .catch(error => {
+                console.error('Reset error:', error);
+                showToast('Reset failed', 'error');
+            });
+    }
+}
+
+// ==================== DEVICES PAGE ====================
+
+function initDevicesPage() {
+    console.log('Initializing devices page...');
+    
+    // Load initial device list
+    loadDevices();
+    
+    // Set up refresh interval
+    setInterval(loadDevices, 10000);
+    
+    // Set up search functionality
+    const searchInput = document.getElementById('deviceSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', filterDevices);
+    }
+    
+    // Set up refresh button
+    const refreshBtn = document.getElementById('refreshDevices');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', loadDevices);
+    }
+}
+
+function loadDevices() {
+    const refreshBtn = document.getElementById('refreshDevices');
+    if (refreshBtn) {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = 'Refreshing...';
+    }
+    
+    fetch('/api/nodes')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                updateDeviceList(data.data);
+                showToast(`Loaded ${data.data.total} devices`, 'success');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading devices:', error);
+            showToast('Failed to load devices', 'error');
+        })
+        .finally(() => {
+            if (refreshBtn) {
+                refreshBtn.disabled = false;
+                refreshBtn.textContent = 'Refresh Devices';
+            }
+        });
+}
+
+function updateDeviceList(data) {
+    const container = document.getElementById('deviceList');
+    if (!container) return;
+    
+    if (!data.nodes || data.nodes.length === 0) {
+        container.innerHTML = '<div class="empty-state">No devices found in the network</div>';
+        return;
+    }
+    
+    let html = '';
+    
+    data.nodes.forEach(device => {
+        const lastSeen = device.last_seen || 'Unknown';
+        const signalStrength = getSignalStrength(device.rssi);
+        
+        html += `
+            <div class="device-card" data-id="${device.id}" data-name="${device.name || ''}">
+                <div class="device-header">
+                    <div class="device-icon">
+                        ${device.id === 1 ? '🏠' : '📡'}
+                    </div>
+                    <div class="device-info">
+                        <h3 class="device-name">${device.name || `Node ${device.id}`}</h3>
+                        <div class="device-id">ID: ${device.id}</div>
+                    </div>
+                    <div class="device-status ${device.online ? 'online' : 'offline'}">
+                        ${device.online ? 'Online' : 'Offline'}
+                    </div>
+                </div>
+                
+                <div class="device-details">
+                    <div class="detail-row">
+                        <span class="detail-label">Signal:</span>
+                        <span class="detail-value">
+                            <div class="signal-strength ${signalStrength}">
+                                <div class="signal-bar"></div>
+                                <div class="signal-bar"></div>
+                                <div class="signal-bar"></div>
+                                <div class="signal-bar"></div>
+                                <div class="signal-bar"></div>
+                            </div>
+                            ${device.rssi || 0} dBm
+                        </span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Hops:</span>
+                        <span class="detail-value">${device.hops || 0}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">Last Seen:</span>
+                        <span class="detail-value">${lastSeen}</span>
+                    </div>
+                </div>
+                
+                <div class="device-actions">
+                    <button class="btn btn-sm btn-info ping-device" data-id="${device.id}">
+                        Ping
+                    </button>
+                    <button class="btn btn-sm btn-warning restart-device" data-id="${device.id}" ${device.id === 1 ? 'disabled' : ''}>
+                        Restart
+                    </button>
+                    <button class="btn btn-sm btn-danger remove-device" data-id="${device.id}" ${device.id === 1 ? 'disabled' : ''}>
+                        Remove
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+    
+    // Add event listeners to action buttons
+    document.querySelectorAll('.ping-device').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const deviceId = this.getAttribute('data-id');
+            pingDevice(deviceId);
+        });
+    });
+    
+    document.querySelectorAll('.restart-device').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const deviceId = this.getAttribute('data-id');
+            restartDevice(deviceId);
+        });
+    });
+    
+    document.querySelectorAll('.remove-device').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const deviceId = this.getAttribute('data-id');
+            removeDevice(deviceId);
+        });
+    });
+}
+
+function getSignalStrength(rssi) {
+    if (rssi >= -50) return 'excellent';
+    if (rssi >= -60) return 'good';
+    if (rssi >= -70) return 'fair';
+    if (rssi >= -80) return 'weak';
+    return 'poor';
+}
+
+function filterDevices() {
+    const searchInput = document.getElementById('deviceSearch');
+    const searchTerm = searchInput.value.toLowerCase();
+    const deviceCards = document.querySelectorAll('.device-card');
+    
+    deviceCards.forEach(card => {
+        const deviceName = card.getAttribute('data-name').toLowerCase();
+        const deviceId = card.getAttribute('data-id');
+        
+        if (deviceName.includes(searchTerm) || 
+            deviceId.includes(searchTerm) || 
+            searchTerm === '') {
+            card.style.display = 'block';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function pingDevice(deviceId) {
+    fetch('/api/ping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: parseInt(deviceId) })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(`Ping sent to device ${deviceId}`, 'success');
+        } else {
+            showToast(`Failed to ping device ${deviceId}`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Ping device error:', error);
+        showToast('Network error', 'error');
+    });
+}
+
+function restartDevice(deviceId) {
+    if (confirm(`Restart device ${deviceId}?`)) {
+        fetch('/api/device/restart', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: parseInt(deviceId) })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`Device ${deviceId} restart initiated`, 'success');
+            } else {
+                showToast(`Failed to restart device ${deviceId}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Restart device error:', error);
+            showToast('Network error', 'error');
+        });
+    }
+}
+
+function removeDevice(deviceId) {
+    if (confirm(`Remove device ${deviceId} from network?`)) {
+        fetch('/api/device/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ device_id: parseInt(deviceId) })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(`Device ${deviceId} removed`, 'success');
+                // Refresh device list
+                setTimeout(loadDevices, 1000);
+            } else {
+                showToast(`Failed to remove device ${deviceId}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Remove device error:', error);
+            showToast('Network error', 'error');
+        });
+    }
+}
+
+// ==================== UTILITY FUNCTIONS ====================
+
+// Format bytes to human readable size
 function formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
     
@@ -86,29 +870,7 @@ function formatBytes(bytes, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-// Calculate signal quality from RSSI
-function calculateSignalQuality(rssi) {
-    // RSSI values range from about -30 (excellent) to -100 (poor)
-    const maxRssi = -30;
-    const minRssi = -100;
-    
-    // Normalize to 0-100
-    let quality = ((rssi - minRssi) / (maxRssi - minRssi)) * 100;
-    
-    // Clamp between 0 and 100
-    quality = Math.max(0, Math.min(100, quality));
-    
-    return Math.round(quality);
-}
-
-// Get signal quality color
-function getSignalColor(quality) {
-    if (quality >= 80) return '#48bb78'; // Green
-    if (quality >= 60) return '#ed8936'; // Orange
-    return '#f56565'; // Red
-}
-
-// Debounce function
+// Debounce function for limiting API calls
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -121,507 +883,13 @@ function debounce(func, wait) {
     };
 }
 
-// Throttle function
-function throttle(func, limit) {
-    let inThrottle;
-    return function() {
-        const args = arguments;
-        const context = this;
-        if (!inThrottle) {
-            func.apply(context, args);
-            inThrottle = true;
-            setTimeout(() => inThrottle = false, limit);
-        }
+// Export functions for debugging (optional)
+if (typeof window !== 'undefined') {
+    window.ESP32LoRa = {
+        loadConfig: loadCurrentConfig,
+        saveConfig: saveConfiguration,
+        loadDevices: loadDevices,
+        sendPing: sendPing,
+        discoverNodes: discoverNodes
     };
 }
-
-// Copy to clipboard
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text)
-        .then(() => {
-            showToast('Copied to clipboard!', 'success');
-        })
-        .catch(err => {
-            console.error('Failed to copy: ', err);
-            showToast('Failed to copy to clipboard', 'error');
-        });
-}
-
-// Validate IP address
-function isValidIP(ip) {
-    const pattern = /^(\d{1,3}\.){3}\d{1,3}$/;
-    if (!pattern.test(ip)) return false;
-    
-    return ip.split('.').every(segment => {
-        const num = parseInt(segment, 10);
-        return num >= 0 && num <= 255;
-    });
-}
-
-// Validate MAC address
-function isValidMAC(mac) {
-    const pattern = /^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/;
-    return pattern.test(mac);
-}
-
-// Generate random string
-function generateRandomString(length) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < length; i++) {
-        result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return result;
-}
-
-// Get current time in HH:MM:SS format
-function getCurrentTime() {
-    const now = new Date();
-    return now.toTimeString().split(' ')[0];
-}
-
-// Get current date in YYYY-MM-DD format
-function getCurrentDate() {
-    const now = new Date();
-    return now.toISOString().split('T')[0];
-}
-
-// Parse query parameters
-function getQueryParams() {
-    const params = {};
-    const queryString = window.location.search.substring(1);
-    const pairs = queryString.split('&');
-    
-    pairs.forEach(pair => {
-        const [key, value] = pair.split('=');
-        if (key) {
-            params[decodeURIComponent(key)] = decodeURIComponent(value || '');
-        }
-    });
-    
-    return params;
-}
-
-// Set query parameter
-function setQueryParam(key, value) {
-    const params = new URLSearchParams(window.location.search);
-    params.set(key, value);
-    window.history.replaceState({}, '', `${window.location.pathname}?${params}`);
-}
-
-// Remove query parameter
-function removeQueryParam(key) {
-    const params = new URLSearchParams(window.location.search);
-    params.delete(key);
-    window.history.replaceState({}, '', `${window.location.pathname}?${params}`);
-}
-
-// Check if element is in viewport
-function isInViewport(element) {
-    const rect = element.getBoundingClientRect();
-    return (
-        rect.top >= 0 &&
-        rect.left >= 0 &&
-        rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-        rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-    );
-}
-
-// Smooth scroll to element
-function smoothScrollTo(elementId) {
-    const element = document.getElementById(elementId);
-    if (element) {
-        element.scrollIntoView({
-            behavior: 'smooth',
-            block: 'start'
-        });
-    }
-}
-
-// Format number with commas
-function numberWithCommas(x) {
-    return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-// Calculate percentage
-function calculatePercentage(part, total) {
-    if (total === 0) return 0;
-    return Math.round((part / total) * 100);
-}
-
-// Deep clone object
-function deepClone(obj) {
-    return JSON.parse(JSON.stringify(obj));
-}
-
-// Merge objects
-function mergeObjects(target, source) {
-    for (const key in source) {
-        if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
-            if (!target[key] || typeof target[key] !== 'object') {
-                target[key] = {};
-            }
-            mergeObjects(target[key], source[key]);
-        } else {
-            target[key] = source[key];
-        }
-    }
-    return target;
-}
-
-// Add CSS to page
-function addCSS(css) {
-    const style = document.createElement('style');
-    style.textContent = css;
-    document.head.appendChild(style);
-}
-
-// Add toast CSS
-addCSS(`
-    .toast {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        border-radius: 5px;
-        color: white;
-        font-weight: 500;
-        z-index: 10000;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        min-width: 300px;
-        max-width: 500px;
-        transform: translateX(100%);
-        transition: transform 0.3s ease-in-out;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-    
-    .toast.show {
-        transform: translateX(0);
-    }
-    
-    .toast-info {
-        background: #2196F3;
-    }
-    
-    .toast-success {
-        background: #4CAF50;
-    }
-    
-    .toast-warning {
-        background: #FF9800;
-    }
-    
-    .toast-error {
-        background: #f44336;
-    }
-    
-    .toast button {
-        background: none;
-        border: none;
-        color: white;
-        font-size: 20px;
-        cursor: pointer;
-        margin-left: 15px;
-        padding: 0;
-        opacity: 0.8;
-    }
-    
-    .toast button:hover {
-        opacity: 1;
-    }
-`);
-
-// Dashboard specific functions
-async function updateDashboard() {
-    try {
-        // Update node count
-        const nodesRes = await fetch('/api/nodes');
-        const nodes = await nodesRes.json();
-        document.getElementById('nodeCount').textContent = nodes.length;
-        
-        // Calculate average RSSI
-        let totalRssi = 0;
-        let count = 0;
-        nodes.forEach(node => {
-            if (node.online && node.rssi !== 0) {
-                totalRssi += node.rssi;
-                count++;
-            }
-        });
-        document.getElementById('avgRssi').textContent = count > 0 ? Math.round(totalRssi / count) : 0;
-        
-        // Update route count
-        const routesRes = await fetch('/api/routes');
-        const routes = await routesRes.json();
-        let activeRoutes = routes.filter(route => route.active).length;
-        document.getElementById('routeCount').textContent = activeRoutes;
-        
-        // Update uptime (get from first node which should be self)
-        if (nodes.length > 0) {
-            const uptimeFormatted = formatUptime(nodes[0].uptime * 1000000); // Convert back to microseconds
-            document.getElementById('uptime').textContent = uptimeFormatted;
-        }
-        
-    } catch (error) {
-        console.error('Error updating dashboard:', error);
-    }
-}
-
-// Devices page functions
-async function loadDevices() {
-    try {
-        // Load nodes
-        const nodesRes = await fetch('/api/nodes');
-        const nodes = await nodesRes.json();
-        
-        const devicesList = document.getElementById('devicesList');
-        devicesList.innerHTML = '';
-        
-        nodes.forEach(node => {
-            const deviceCard = document.createElement('div');
-            deviceCard.className = `device-card ${node.id === 1 ? 'master' : ''} ${!node.online ? 'offline' : ''}`;
-            
-            // Convert seconds to human readable
-            const timeAgo = formatTimeDifference(node.last_seen * 1000000);
-            const uptimeFormatted = formatUptime(node.uptime * 1000000);
-            
-            deviceCard.innerHTML = `
-                <div class="device-icon">
-                    <i class="fas ${node.id === 1 ? 'fa-crown' : 'fa-microchip'}"></i>
-                </div>
-                <div class="device-info">
-                    <h3>${node.name}</h3>
-                    <p>ID: ${node.id} ${node.id === 1 ? '(Master)' : '(Slave)'}</p>
-                    <div class="device-stats">
-                        <span class="stat"><i class="fas fa-signal"></i> ${node.rssi} dBm</span>
-                        <span class="stat"><i class="fas fa-route"></i> ${node.hop_count} hops</span>
-                        <span class="stat"><i class="fas fa-clock"></i> ${timeAgo}</span>
-                    </div>
-                </div>
-                <div class="device-status">
-                    <span class="status-indicator ${node.online ? 'online' : 'offline'}"></span>
-                    <span>${node.online ? 'Online' : 'Offline'}</span>
-                </div>
-            `;
-            
-            deviceCard.onclick = () => showNodeDetails(node);
-            devicesList.appendChild(deviceCard);
-        });
-        
-        // Load routes
-        const routesRes = await fetch('/api/routes');
-        const routes = await routesRes.json();
-        
-        const tableBody = document.getElementById('routingTableBody');
-        tableBody.innerHTML = '';
-        
-        routes.forEach(route => {
-            const row = tableBody.insertRow();
-            const timeAgo = formatTimeDifference(route.last_update * 1000000);
-            
-            row.innerHTML = `
-                <td>${route.destination}</td>
-                <td>${route.next_hop}</td>
-                <td>${route.hop_count}</td>
-                <td>
-                    <div class="quality-bar">
-                        <div class="quality-fill" style="width: ${Math.min(100, (route.link_quality + 130) * 2)}%"></div>
-                    </div>
-                    ${route.link_quality} dBm
-                </td>
-                <td>${timeAgo}</td>
-                <td>
-                    <span class="status-badge ${route.active ? 'active' : 'inactive'}">
-                        ${route.active ? 'Active' : 'Inactive'}
-                    </span>
-                </td>
-            `;
-        });
-        
-    } catch (error) {
-        console.error('Error loading devices:', error);
-        showToast('Failed to load devices: ' + error.message, 'error');
-    }
-}
-
-// Show node details modal
-function showNodeDetails(node) {
-    const modal = document.getElementById('nodeModal');
-    const details = document.getElementById('nodeDetails');
-    
-    const timeAgo = formatTimeDifference(node.last_seen * 1000000);
-    const uptimeFormatted = formatUptime(node.uptime * 1000000);
-    const signalQuality = calculateSignalQuality(node.rssi);
-    const signalColor = getSignalColor(signalQuality);
-    
-    details.innerHTML = `
-        <div class="node-detail-section">
-            <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
-            <p><strong>Node ID:</strong> ${node.id}</p>
-            <p><strong>Name:</strong> ${node.name}</p>
-            <p><strong>Role:</strong> ${node.id === 1 ? 'Master' : 'Slave'}</p>
-            <p><strong>Status:</strong> <span class="status-badge ${node.online ? 'active' : 'inactive'}">
-                ${node.online ? 'Online' : 'Offline'}
-            </span></p>
-            <p><strong>Last Seen:</strong> ${timeAgo}</p>
-            <p><strong>Uptime:</strong> ${uptimeFormatted}</p>
-        </div>
-        
-        <div class="node-detail-section">
-            <h3><i class="fas fa-chart-line"></i> Performance Metrics</h3>
-            <p><strong>RSSI:</strong> ${node.rssi} dBm</p>
-            <p><strong>Signal Quality:</strong> 
-                <span style="color: ${signalColor}; font-weight: bold;">${signalQuality}%</span>
-            </p>
-            <p><strong>Hop Count:</strong> ${node.hop_count}</p>
-        </div>
-        
-        <div class="node-detail-section">
-            <h3><i class="fas fa-cogs"></i> Actions</h3>
-            <div class="action-buttons">
-                <button class="btn btn-small" onclick="pingNode(${node.id})">
-                    <i class="fas fa-bullhorn"></i> Ping Node
-                </button>
-                <button class="btn btn-small" onclick="sendMessage(${node.id})">
-                    <i class="fas fa-envelope"></i> Send Message
-                </button>
-                ${node.id !== 1 ? `
-                    <button class="btn btn-small btn-danger" onclick="removeNode(${node.id})">
-                        <i class="fas fa-trash"></i> Remove Node
-                    </button>
-                ` : ''}
-            </div>
-        </div>
-    `;
-    
-    modal.style.display = 'block';
-}
-
-// Dashboard functions
-function sendPing() {
-    fetch('/api/ping', { method: 'POST' })
-        .then(response => {
-            showToast('Ping sent to all nodes', 'success');
-            addActivity('Sent ping to all nodes', 'tx');
-        })
-        .catch(error => {
-            console.error('Error sending ping:', error);
-            showToast('Failed to send ping: ' + error.message, 'error');
-        });
-}
-
-function discoverNodes() {
-    fetch('/api/discover', { method: 'POST' })
-        .then(response => {
-            showToast('Node discovery initiated', 'success');
-            addActivity('Initiating node discovery', 'tx');
-        })
-        .catch(error => {
-            console.error('Error discovering nodes:', error);
-            showToast('Failed to discover nodes: ' + error.message, 'error');
-        });
-}
-
-function refreshNetwork() {
-    if (window.location.pathname === '/') {
-        updateDashboard();
-    } else if (window.location.pathname === '/devices') {
-        loadDevices();
-    }
-    showToast('Network data refreshed', 'info');
-}
-
-function addActivity(message, type) {
-    const activityList = document.getElementById('activityList');
-    if (!activityList) return;
-    
-    const activityItem = document.createElement('div');
-    activityItem.className = 'activity-item';
-    
-    const iconClass = type === 'tx' ? 'fas fa-paper-plane' : 
-                     type === 'rx' ? 'fas fa-broadcast-tower' : 
-                     'fas fa-info-circle';
-    const iconColor = type === 'tx' ? 'tx' : 
-                     type === 'rx' ? 'rx' : 'info';
-    
-    activityItem.innerHTML = `
-        <div class="activity-icon ${iconColor}">
-            <i class="${iconClass}"></i>
-        </div>
-        <div class="activity-details">
-            <p>${message}</p>
-            <span class="activity-time">${getCurrentTime()}</span>
-        </div>
-    `;
-    
-    activityList.prepend(activityItem);
-    
-    // Keep only last 10 activities
-    while (activityList.children.length > 10) {
-        activityList.removeChild(activityList.lastChild);
-    }
-}
-
-// Export functions for use in other scripts
-window.CommonUtils = {
-    showToast,
-    formatBytes,
-    formatTimeDifference,
-    formatUptime,
-    calculateSignalQuality,
-    getSignalColor,
-    debounce,
-    throttle,
-    copyToClipboard,
-    isValidIP,
-    isValidMAC,
-    generateRandomString,
-    getCurrentTime,
-    getCurrentDate,
-    getQueryParams,
-    setQueryParam,
-    removeQueryParam,
-    isInViewport,
-    smoothScrollTo,
-    numberWithCommas,
-    calculatePercentage,
-    deepClone,
-    mergeObjects
-};
-
-// Initialize based on current page
-document.addEventListener('DOMContentLoaded', function() {
-    const path = window.location.pathname;
-    
-    if (path === '/' || path === '/index.html') {
-        // Dashboard page
-        updateDashboard();
-        setInterval(updateDashboard, 10000); // Update every 10 seconds
-    } else if (path === '/devices') {
-        // Devices page
-        loadDevices();
-        setInterval(loadDevices, 10000); // Update every 10 seconds
-    } else if (path === '/config') {
-        // Config page - loadConfig is called from lora_config.html
-        console.log('Config page loaded');
-    }
-    
-    // Update current node ID if available
-    fetch('/api/config')
-        .then(response => response.json())
-        .then(config => {
-            const nodeIdElements = document.querySelectorAll('#nodeId, #nodeIdValue');
-            nodeIdElements.forEach(el => {
-                if (el.id === 'nodeIdValue') {
-                    el.textContent = config.node_id;
-                } else {
-                    el.textContent = config.node_id;
-                }
-            });
-        })
-        .catch(error => {
-            console.error('Error loading node ID:', error);
-        });
-});
