@@ -25,6 +25,8 @@ void rfm95w_set_ldro(bool enable);
 void rfm95w_set_mode(uint8_t mode);
 bool rfm95w_check_rx(void);
 bool rfm95w_receive_packet(uint8_t *buffer, uint8_t *len, int16_t *rssi, int8_t *snr);
+int16_t rfm95w_get_current_rssi(void);
+bool rfm95w_is_channel_free(int16_t threshold);
 bool rfm95w_send_packet(uint8_t *data, uint8_t len);
 
 #endif // RFM95W_H

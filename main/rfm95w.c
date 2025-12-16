@@ -28,6 +28,7 @@ enum {
     REG_IRQ_FLAGS = 0x12,
     REG_RX_NB_BYTES = 0x13,
     REG_PKT_RSSI_VALUE = 0x1A,
+    REG_RSSI_VALUE = 0x1B, // Current RSSI
     REG_PKT_SNR_VALUE = 0x19,
     REG_MODEM_CONFIG_1 = 0x1D,
     REG_MODEM_CONFIG_2 = 0x1E,
@@ -295,6 +296,17 @@ bool rfm95w_receive_packet(uint8_t *buffer, uint8_t *len, int16_t *rssi, int8_t 
     *snr = (int8_t)read_reg(REG_PKT_SNR_VALUE) / 4;
     
     return true;
+}
+
+// Get current RSSI (instantaneous)
+int16_t rfm95w_get_current_rssi(void) {
+    return -157 + read_reg(REG_RSSI_VALUE); // -157 for HF port (868/915), -164 for LF
+}
+
+// Check if channel is free (RSSI check)
+bool rfm95w_is_channel_free(int16_t threshold) {
+    int16_t rssi = rfm95w_get_current_rssi();
+    return (rssi < threshold);
 }
 
 // Send packet

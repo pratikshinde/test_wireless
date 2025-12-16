@@ -12,6 +12,7 @@
 #include "esp_netif.h"
 #include <string.h>
 #include "esp_timer.h"
+#include "esp_random.h"
 
 static const char *TAG = "LORA_MESH";
 
@@ -167,11 +168,32 @@ void lora_mesh_task(void *pvParameters) {
         // Process queued packets for transmission
         lora_packet_t tx_packet;
         if (xQueueReceive(lora_queue, &tx_packet, 0) == pdTRUE) {
-            gpio_set_level(tx_led, 1);
-            rfm95w_send_packet(tx_packet.data, tx_packet.len);
-            gpio_set_level(tx_led, 0);
-            ESP_LOGI(TAG, "TX to %d: type=0x%02X len=%d", 
-                    tx_packet.dest, tx_packet.type, tx_packet.len);
+            // LBT: Check for channel activity
+            bool channel_free = false;
+            int retries = 0;
+            const int max_retries = 5;
+            const int backoff_ms = 20;
+
+            while (retries < max_retries) {
+                if (rfm95w_is_channel_free(-85)) { // -85 dBm threshold
+                    channel_free = true;
+                    break;
+                }
+                ESP_LOGD(TAG, "Channel busy (%d dBm), waiting...", rfm95w_get_current_rssi());
+                vTaskDelay(pdMS_TO_TICKS(backoff_ms + (esp_random() % 50))); // Random backoff
+                retries++;
+            }
+
+            if (channel_free) {
+                gpio_set_level(tx_led, 1);
+                rfm95w_send_packet(tx_packet.data, tx_packet.len);
+                gpio_set_level(tx_led, 0);
+                ESP_LOGI(TAG, "TX to %d: type=0x%02X len=%d", 
+                        tx_packet.dest, tx_packet.type, tx_packet.len);
+            } else {
+                 ESP_LOGW(TAG, "TX dropped: Channel busy timeout");
+                 // Optional: Re-queue packet or drop
+            }
         }
         
         vTaskDelay(10 / portTICK_PERIOD_MS);

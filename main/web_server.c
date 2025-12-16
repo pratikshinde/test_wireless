@@ -253,6 +253,14 @@ static esp_err_t test_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(data, "status", "online");
     cJSON_AddNumberToObject(data, "uptime", xTaskGetTickCount() * portTICK_PERIOD_MS / 1000);
     cJSON_AddStringToObject(data, "version", "1.0.0");
+
+    // Add node_id for UI header
+    lora_config_t config;
+    if (config_load(&config) == ESP_OK) {
+        cJSON_AddNumberToObject(data, "node_id", config.node_id);
+    } else {
+        cJSON_AddNumberToObject(data, "node_id", 1); // Default
+    }
     
     return send_json_response(req, true, "Web server is working", data);
 }

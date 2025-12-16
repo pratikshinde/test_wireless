@@ -6,8 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Devices</title>
     <link rel="stylesheet" href="/styles.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
 </head>
 
 <body>
@@ -15,26 +14,48 @@
         <!-- Navigation -->
         <nav class="navbar">
             <div class="nav-brand">
-                <i class="fas fa-satellite-dish"></i>
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 3L3 21v-2l16-16h2zm-4 4l-4 4 1.41 1.41 4-4L17 7zm-4 4l-4 4 1.41 1.41 4-4L13 11z" />
+                </svg>
                 <span>LoRa Mesh Network</span>
             </div>
             <div class="nav-menu">
-                <a href="/" class="nav-link"><i class="fas fa-tachometer-alt"></i> Dashboard</a>
-                <a href="/config" class="nav-link"><i class="fas fa-cog"></i> LoRa Config</a>
-                <a href="/devices" class="nav-link active"><i class="fas fa-network-wired"></i> Devices</a>
+                <a href="/" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                        viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 4a9 9 0 0 1 9 9h-2a7 7 0 0 0-7-7 7 7 0 0 0-7 7H3a9 9 0 0 1 9-9zm0 5l2 5-2 1-2-1 2-5z" />
+                    </svg> Dashboard</a>
+                <a href="/config" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                        viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+                    </svg> LoRa Config</a>
+                <a href="/devices" class="nav-link active"><svg xmlns="http://www.w3.org/2000/svg" width="16"
+                        height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M20 16h-4v-2.07l-2.9-2.9C15.5 10.3 17 8.35 17 6c0-2.76-2.24-5-5-5S7 3.24 7 6c0 2.35 1.5 4.3 3.9 5.03l-2.9 2.9V16H4c-1.1 0-2 .9-2 2v4h4v-2h2v2h4v-2h2v2h4v-2h2v2h4v-4c0-1.1-.9-2-2-2zm-8-9c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" />
+                    </svg> Devices</a>
             </div>
             <div class="nav-status">
                 <span class="status-indicator online"></span>
-                <span>Node <span id="nodeId">1</span></span>
+                <span>Node <span id="nodeId">...</span></span>
             </div>
         </nav>
 
         <!-- Devices Content -->
         <div class="devices-container">
             <div class="devices-header">
-                <h1><i class="fas fa-network-wired"></i> Network Devices</h1>
+                <h1><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                        fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
+                        <path
+                            d="M20 16h-4v-2.07l-2.9-2.9C15.5 10.3 17 8.35 17 6c0-2.76-2.24-5-5-5S7 3.24 7 6c0 2.35 1.5 4.3 3.9 5.03l-2.9 2.9V16H4c-1.1 0-2 .9-2 2v4h4v-2h2v2h4v-2h2v2h4v-2h2v2h4v-4c0-1.1-.9-2-2-2zm-8-9c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" />
+                    </svg> Network Devices</h1>
                 <button class="btn btn-primary" onclick="refreshDevices()">
-                    <i class="fas fa-sync-alt"></i> Refresh
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                        fill="currentColor">
+                        <path
+                            d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" />
+                    </svg> Refresh
                 </button>
             </div>
 
@@ -45,7 +66,11 @@
 
             <!-- Routing Table -->
             <div class="routing-table">
-                <h2><i class="fas fa-route"></i> Routing Table</h2>
+                <h2><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                        fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
+                        <path
+                            d="M19 15.18V7c0-2.21-1.79-4-4-4s-4 1.79-4 4v10c0 2.21-1.79 4-4 4s-4-1.79-4-4V5.82h2V17c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1.9-2 2-2s2 .9 2 2v8.18h2z" />
+                    </svg> Routing Table</h2>
                 <table>
                     <thead>
                         <tr>
@@ -78,8 +103,18 @@
         </div>
     </div>
 
-    <script src="/script.js"></script>
+    <script src="/script.js?v=2"></script>
     <script>
+        // Inline fallback to ensure Node ID updates
+        fetch('/api/config')
+            .then(r => r.json())
+            .then(data => {
+                if (data.success && data.data.node_id && document.getElementById('nodeId')) {
+                    document.getElementById('nodeId').textContent = data.data.node_id;
+                }
+            })
+            .catch(e => console.log('Inline ID fetch failed', e));
+
         // Load devices and routes
         async function loadDevices() {
             try {
@@ -98,15 +133,15 @@
 
                     deviceCard.innerHTML = `
                         <div class="device-icon">
-                            <i class="fas ${node.id === 1 ? 'fa-crown' : 'fa-microchip'}"></i>
+                            ${node.id === 1 ? getIcon('crown') : getIcon('microchip')}
                         </div>
                         <div class="device-info">
                             <h3>${node.name}</h3>
                             <p>ID: ${node.id} ${node.id === 1 ? '(Master)' : '(Slave)'}</p>
                             <div class="device-stats">
-                                <span class="stat"><i class="fas fa-signal"></i> ${node.rssi} dBm</span>
-                                <span class="stat"><i class="fas fa-route"></i> ${node.hop_count} hops</span>
-                                <span class="stat"><i class="fas fa-clock"></i> ${timeAgo}s ago</span>
+                                <span class="stat">${getIcon('signal')} ${node.rssi} dBm</span>
+                                <span class="stat">${getIcon('route')} ${node.hop_count} hops</span>
+                                <span class="stat">${getIcon('clock')} ${timeAgo}s ago</span>
                             </div>
                         </div>
                         <div class="device-status">
@@ -165,7 +200,7 @@
 
             details.innerHTML = `
                 <div class="node-detail-section">
-                    <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
+                    <h3>${getIcon('info_circle')} Basic Information</h3>
                     <p><strong>Node ID:</strong> ${node.id}</p>
                     <p><strong>Name:</strong> ${node.name}</p>
                     <p><strong>Role:</strong> ${node.id === 1 ? 'Master' : 'Slave'}</p>
@@ -175,7 +210,7 @@
                 </div>
                 
                 <div class="node-detail-section">
-                    <h3><i class="fas fa-chart-line"></i> Performance Metrics</h3>
+                    <h3>${getIcon('chart_line')} Performance Metrics</h3>
                     <p><strong>RSSI:</strong> ${node.rssi} dBm</p>
                     <p><strong>Hop Count:</strong> ${node.hop_count}</p>
                     <p><strong>Last Seen:</strong> ${timeAgo} seconds ago</p>
@@ -183,17 +218,17 @@
                 </div>
                 
                 <div class="node-detail-section">
-                    <h3><i class="fas fa-cogs"></i> Actions</h3>
+                    <h3>${getIcon('cog')} Actions</h3>
                     <div class="action-buttons">
                         <button class="btn btn-small" onclick="pingNode(${node.id})">
-                            <i class="fas fa-bullhorn"></i> Ping Node
+                            ${getIcon('bullhorn')} Ping Node
                         </button>
                         <button class="btn btn-small" onclick="sendMessage(${node.id})">
-                            <i class="fas fa-envelope"></i> Send Message
+                            ${getIcon('envelope')} Send Message
                         </button>
                         ${node.id !== 1 ? `
                             <button class="btn btn-small btn-danger" onclick="removeNode(${node.id})">
-                                <i class="fas fa-trash"></i> Remove Node
+                                ${getIcon('trash')} Remove Node
                             </button>
                         ` : ''}
                     </div>
