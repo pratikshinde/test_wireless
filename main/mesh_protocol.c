@@ -1,5 +1,5 @@
 #include "mesh_protocol.h"
-#include "lora_mesh.h"  // Add this for lora_send_packet and lora_broadcast_packet
+
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_random.h"
@@ -11,6 +11,11 @@
 static const char *TAG = "MESH_PROTOCOL";
 static lora_config_t *current_config;
 static uint16_t sequence_number = 0;
+
+// Forward declarations from lora_mesh.h to avoid circular dependency
+bool lora_send_packet(uint8_t dest, uint8_t *data, uint8_t len, msg_type_t type);
+bool lora_broadcast_packet(uint8_t *data, uint8_t len, msg_type_t type);
+void mesh_send_beacon(void);
 
 // Forward declarations for packet handlers
 static void handle_beacon_packet(lora_packet_t *packet);
@@ -178,18 +183,74 @@ static void handle_data_packet(lora_packet_t *packet) {
 
 // Handle route discovery
 static void handle_route_discovery(lora_packet_t *packet) {
-    if (!packet) return;
+    if (!packet || packet->len < sizeof(route_request_t) + 3) return;
     
-    // TODO: Implement AODV-like route discovery
-    ESP_LOGI(TAG, "Route discovery packet from %d", packet->src);
+    route_request_t *rreq = (route_request_t *)packet->data;
+    
+    ESP_LOGI(TAG, "RREQ: Origin=%d Target=%d Seq=%d Hops=%d (via %d)", 
+             rreq->src, rreq->dest, rreq->sequence, rreq->hop_count, packet->src);
+             
+    // 1. Update reverse route to Originator
+    mesh_add_or_update_route(rreq->src, packet->src, rreq->hop_count + 1, packet->rssi);
+    
+    // 2. Check if we are the target
+    if (rreq->dest == current_config->node_id) {
+        ESP_LOGI(TAG, "RREQ reached target! Sending RREP");
+        
+        route_reply_t rrep = {
+            .src = current_config->node_id, // We are the target
+            .dest = rreq->src,              // Originator is destination of RREP
+            .sequence = rreq->sequence,
+            .hop_count = 0
+        };
+        
+        // Send unicast RREP back to the node we received RREQ from
+        lora_send_packet(packet->src, (uint8_t*)&rrep, sizeof(route_reply_t), MSG_ROUTE_REPLY);
+        
+    } else {
+        // 3. Forward RREQ if TTL allows and not seen before (simplified loop check)
+        if (rreq->hop_count < current_config->max_hops - 1) {
+            // Check if we have processed this RREQ recently (Optimization omitted for simplicity, relying on hop count)
+            // Ideally we should check a "seen RREQ" cache
+            
+            rreq->hop_count++;
+            lora_broadcast_packet((uint8_t*)rreq, sizeof(route_request_t), MSG_ROUTE_DISCOVERY);
+        }
+    }
 }
 
 // Handle route reply
 static void handle_route_reply(lora_packet_t *packet) {
-    if (!packet) return;
+    if (!packet || packet->len < sizeof(route_reply_t) + 3) return;
     
-    // TODO: Implement route reply handling
-    ESP_LOGI(TAG, "Route reply packet from %d", packet->src);
+    route_reply_t *rrep = (route_reply_t *)packet->data;
+    
+    ESP_LOGI(TAG, "RREP: Target=%d Origin=%d Hops=%d (via %d)", 
+             rrep->src, rrep->dest, rrep->hop_count, packet->src);
+             
+    // 1. Update forward route to Target (rrep.src)
+    mesh_add_or_update_route(rrep->src, packet->src, rrep->hop_count + 1, packet->rssi);
+    
+    // 2. Check if we are the connection initiator (Originator)
+    if (rrep->dest == current_config->node_id) {
+        ESP_LOGI(TAG, "Route discovery complete! Route to %d established via %d", 
+                 rrep->src, packet->src);
+                 
+    } else {
+        // 3. Forward RREP towards Originator (rrep.dest)
+        if (rrep->hop_count < current_config->max_hops - 1) {
+            uint8_t next_hop = mesh_get_next_hop(rrep->dest);
+            
+            if (next_hop != 0) {
+                rrep->hop_count++;
+                lora_send_packet(next_hop, (uint8_t*)rrep, sizeof(route_reply_t), MSG_ROUTE_REPLY);
+            } else {
+                ESP_LOGW(TAG, "RREP Forward failed: No route to Originator %d", rrep->dest);
+                // Fallback: Broadcast if enabled? Or just DROP.
+                // Dropping is safer to prevent loops.
+            }
+        }
+    }
 }
 
 // Perform mesh maintenance

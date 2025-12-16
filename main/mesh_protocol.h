@@ -39,6 +39,13 @@ typedef struct {
     uint8_t hop_count;
 } route_request_t;
 
+typedef struct {
+    uint8_t src;      // Target node (who we were looking for)
+    uint8_t dest;     // Originator (who sent RREQ)
+    uint16_t sequence;
+    uint8_t hop_count;
+} route_reply_t;
+
 // Function prototypes
 void mesh_protocol_init(lora_config_t *config);
 void mesh_maintenance_task(void *pvParameters);

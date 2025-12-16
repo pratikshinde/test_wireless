@@ -1,62 +1,78 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoRa Configuration</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
     <style>
         body {
             padding: 20px;
             background-color: #f8f9fa;
         }
+
         .card {
             margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
             border: 1px solid #e0e0e0;
         }
+
         .card-header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             font-weight: 600;
             border-bottom: none;
         }
+
         .config-section {
             margin-bottom: 25px;
             padding-bottom: 15px;
         }
+
         .config-section:not(:last-child) {
             border-bottom: 1px solid #e9ecef;
         }
+
         .btn-save-section {
             margin-top: 15px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
         }
+
         .btn-save-section:hover {
             background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
+
         .form-label {
             font-weight: 500;
             color: #495057;
             margin-bottom: 5px;
         }
-        .form-control, .form-select {
+
+        .form-control,
+        .form-select {
             border: 1px solid #ced4da;
             border-radius: 6px;
             padding: 8px 12px;
         }
-        .form-control:focus, .form-select:focus {
+
+        .form-control:focus,
+        .form-select:focus {
             border-color: #667eea;
             box-shadow: 0 0 0 0.25rem rgba(102, 126, 234, 0.25);
         }
+
         h4 {
             color: #343a40;
             margin-bottom: 25px;
             font-weight: 600;
         }
+
         .toast {
             position: fixed;
             top: 20px;
@@ -65,12 +81,14 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h4>LoRa Mesh Configuration</h4>
-        
+
         <!-- Toast for notifications -->
-        <div id="toast" class="toast align-items-center text-white bg-success border-0" role="alert" style="display: none;">
+        <div id="toast" class="toast align-items-center text-white bg-success border-0" role="alert"
+            style="display: none;">
             <div class="d-flex">
                 <div class="toast-body" id="toast-message"></div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
@@ -163,7 +181,8 @@
                         </div>
                         <div class="mb-3">
                             <label for="sync_word" class="form-label">Sync Word (Hex)</label>
-                            <input type="text" class="form-control" id="sync_word" pattern="^0x[0-9A-Fa-f]{2}$" placeholder="0x12">
+                            <input type="text" class="form-control" id="sync_word" pattern="^0x[0-9A-Fa-f]{2}$"
+                                placeholder="0x12">
                         </div>
                     </div>
                 </div>
@@ -171,7 +190,8 @@
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="preamble_length" class="form-label">Preamble Length</label>
-                            <input type="number" class="form-control" id="preamble_length" min="6" max="65535" value="8">
+                            <input type="number" class="form-control" id="preamble_length" min="6" max="65535"
+                                value="8">
                         </div>
                     </div>
                     <div class="col-md-6">
@@ -191,12 +211,14 @@
                     <div class="col-md-6">
                         <div class="form-check mb-3">
                             <input class="form-check-input" type="checkbox" id="enable_ldro">
-                            <label class="form-check-label" for="enable_ldro">Enable LDRO (Low Data Rate Optimize)</label>
+                            <label class="form-check-label" for="enable_ldro">Enable LDRO (Low Data Rate
+                                Optimize)</label>
                         </div>
                     </div>
                 </div>
                 <div class="d-grid">
-                    <button type="button" class="btn btn-save-section" onclick="saveRadioSettings()">Save Radio Settings</button>
+                    <button type="button" class="btn btn-save-section" onclick="saveRadioSettings()">Save Radio
+                        Settings</button>
                 </div>
             </div>
         </div>
@@ -263,7 +285,8 @@
                     </div>
                 </div>
                 <div class="d-grid">
-                    <button type="button" class="btn btn-save-section" onclick="saveNetworkSettings()">Save Network Settings</button>
+                    <button type="button" class="btn btn-save-section" onclick="saveNetworkSettings()">Save Network
+                        Settings</button>
                 </div>
             </div>
         </div>
@@ -303,7 +326,8 @@
                     </div>
                 </div>
                 <div class="d-grid">
-                    <button type="button" class="btn btn-save-section" onclick="saveWiFiSettings()">Save WiFi Settings</button>
+                    <button type="button" class="btn btn-save-section" onclick="saveWiFiSettings()">Save WiFi
+                        Settings</button>
                 </div>
             </div>
         </div>
@@ -322,36 +346,37 @@
                         </div>
                         <div class="mb-3">
                             <label for="aes_key" class="form-label">AES Key (32 hex characters)</label>
-                            <input type="text" class="form-control" id="aes_key" pattern="^[0-9A-Fa-f]{32}$" 
-                                   placeholder="A96ED70C...7CFC6294" maxlength="32">
+                            <input type="text" class="form-control" id="aes_key" pattern="^[0-9A-Fa-f]{32}$"
+                                placeholder="A96ED70C...7CFC6294" maxlength="32">
                             <small class="text-muted">Enter 32-character hex key (16 bytes)</small>
                         </div>
                     </div>
                     <div class="col-md-6">
                         <div class="mb-3">
                             <label for="iv" class="form-label">Initialization Vector (32 hex characters)</label>
-                            <input type="text" class="form-control" id="iv" pattern="^[0-9A-Fa-f]{32}$" 
-                                   placeholder="0123456789ABCDEF..." maxlength="32">
+                            <input type="text" class="form-control" id="iv" pattern="^[0-9A-Fa-f]{32}$"
+                                placeholder="0123456789ABCDEF..." maxlength="32">
                             <small class="text-muted">Enter 32-character hex IV (16 bytes)</small>
                         </div>
                     </div>
                 </div>
                 <div class="d-grid">
-                    <button type="button" class="btn btn-save-section" onclick="saveSecuritySettings()">Save Security Settings</button>
+                    <button type="button" class="btn btn-save-section" onclick="saveSecuritySettings()">Save Security
+                        Settings</button>
                 </div>
             </div>
         </div>
 
         <!-- Save All Button -->
         <div class="card">
-            <div class="card-body text-center">
-                <button type="button" class="btn btn-primary btn-lg" onclick="saveAllSettings()" style="padding: 12px 40px;">
+            <div class="card-body text-center d-grid gap-3 d-md-block">
+                <button type="button" class="btn btn-primary btn-lg" onclick="saveAllSettings()">
                     Save All Settings
                 </button>
-                <button type="button" class="btn btn-outline-secondary btn-lg ms-3" onclick="loadCurrentSettings()" style="padding: 12px 40px;">
+                <button type="button" class="btn btn-outline-secondary btn-lg" onclick="loadCurrentSettings()">
                     Reload Settings
                 </button>
-                <button type="button" class="btn btn-outline-danger btn-lg ms-3" onclick="resetToDefaults()" style="padding: 12px 40px;">
+                <button type="button" class="btn btn-outline-danger btn-lg" onclick="resetToDefaults()">
                     Reset to Defaults
                 </button>
             </div>
@@ -360,16 +385,16 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    
+
     <script>
         // Toast notification function
         function showToast(message, type = 'success') {
             const toast = document.getElementById('toast');
             const toastMessage = document.getElementById('toast-message');
-            
+
             toastMessage.textContent = message;
             toast.className = `toast align-items-center text-white border-0 show`;
-            
+
             if (type === 'success') {
                 toast.classList.add('bg-success');
             } else if (type === 'error') {
@@ -377,7 +402,7 @@
             } else if (type === 'warning') {
                 toast.classList.add('bg-warning');
             }
-            
+
             // Auto-hide after 3 seconds
             setTimeout(() => {
                 toast.classList.remove('show');
@@ -386,16 +411,22 @@
 
         // Load current settings from device
         function loadCurrentSettings() {
-            fetch('/api/config')
+            fetch('/api/config', { cache: 'no-store' })
                 .then(response => response.json())
-                .then(data => {
+                .then(response => {
+                    if (!response.success || !response.data) {
+                        console.error('Invalid response:', response);
+                        showToast('Failed to load settings', 'error');
+                        return;
+                    }
+                    const data = response.data;
                     // Device Identification
                     document.getElementById('node_id').value = data.node_id || 1;
                     document.getElementById('node_name').value = data.node_name || 'LoRa-Node';
-                    
+
                     // Radio Settings
                     document.getElementById('frequency').value = data.frequency || 868000000;
-                    document.getElementById('spreading_factor').value = data.spreading_factor || 7;
+                    document.getElementById('spreading_factor').value = data.spread_factor || 7;
                     document.getElementById('bandwidth').value = data.bandwidth || 125000;
                     document.getElementById('coding_rate').value = data.coding_rate || 5;
                     document.getElementById('tx_power').value = data.tx_power || 17;
@@ -404,7 +435,7 @@
                     document.getElementById('symbol_timeout').value = data.symbol_timeout || 5;
                     document.getElementById('enable_crc').checked = data.enable_crc || true;
                     document.getElementById('enable_ldro').checked = data.enable_ldro || true;
-                    
+
                     // Network Settings
                     document.getElementById('ping_interval').value = data.ping_interval || 30;
                     document.getElementById('beacon_interval').value = data.beacon_interval || 60;
@@ -414,18 +445,18 @@
                     document.getElementById('ack_timeout').value = data.ack_timeout || 1000;
                     document.getElementById('enable_self_healing').checked = data.enable_self_healing || false;
                     document.getElementById('healing_timeout').value = data.healing_timeout || 30;
-                    
+
                     // WiFi Settings
                     document.getElementById('wifi_ssid').value = data.wifi_ssid || 'LoRa-Mesh';
                     document.getElementById('wifi_password').value = data.wifi_password || '';
                     document.getElementById('enable_web_server').checked = data.enable_web_server || false;
                     document.getElementById('web_port').value = data.web_port || 80;
-                    
+
                     // Security Settings
                     document.getElementById('enable_encryption').checked = data.enable_encryption || false;
                     document.getElementById('aes_key').value = data.aes_key || '';
                     document.getElementById('iv').value = data.iv || '';
-                    
+
                     showToast('Settings loaded successfully!');
                 })
                 .catch(error => {
@@ -438,7 +469,7 @@
         function saveRadioSettings() {
             const settings = {
                 frequency: parseInt(document.getElementById('frequency').value),
-                spreading_factor: parseInt(document.getElementById('spreading_factor').value),
+                spread_factor: parseInt(document.getElementById('spreading_factor').value),
                 bandwidth: parseInt(document.getElementById('bandwidth').value),
                 coding_rate: parseInt(document.getElementById('coding_rate').value),
                 tx_power: parseInt(document.getElementById('tx_power').value),
@@ -448,8 +479,8 @@
                 enable_crc: document.getElementById('enable_crc').checked,
                 enable_ldro: document.getElementById('enable_ldro').checked
             };
-            
-            saveSettingsSection('/api/config/radio', settings, 'Radio settings');
+
+            saveSettingsSection('/api/config', settings, 'Radio settings');
         }
 
         // Save Network Settings
@@ -464,8 +495,8 @@
                 enable_self_healing: document.getElementById('enable_self_healing').checked,
                 healing_timeout: parseInt(document.getElementById('healing_timeout').value)
             };
-            
-            saveSettingsSection('/api/config/network', settings, 'Network settings');
+
+            saveSettingsSection('/api/config', settings, 'Network settings');
         }
 
         // Save WiFi Settings
@@ -476,8 +507,8 @@
                 enable_web_server: document.getElementById('enable_web_server').checked,
                 web_port: parseInt(document.getElementById('web_port').value)
             };
-            
-            saveSettingsSection('/api/config/wifi', settings, 'WiFi settings');
+
+            saveSettingsSection('/api/config', settings, 'WiFi settings');
         }
 
         // Save Security Settings
@@ -487,8 +518,8 @@
                 aes_key: document.getElementById('aes_key').value,
                 iv: document.getElementById('iv').value
             };
-            
-            saveSettingsSection('/api/config/security', settings, 'Security settings');
+
+            saveSettingsSection('/api/config', settings, 'Security settings');
         }
 
         // Generic function to save settings section
@@ -500,18 +531,18 @@
                 },
                 body: JSON.stringify(settings)
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showToast(`${sectionName} saved successfully!`);
-                } else {
-                    showToast(`Failed to save ${sectionName.toLowerCase()}: ${data.message}`, 'error');
-                }
-            })
-            .catch(error => {
-                console.error(`Error saving ${sectionName}:`, error);
-                showToast(`Failed to save ${sectionName.toLowerCase()}`, 'error');
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast(`${sectionName} saved successfully!`);
+                    } else {
+                        showToast(`Failed to save ${sectionName.toLowerCase()}: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error(`Error saving ${sectionName}:`, error);
+                    showToast(`Failed to save ${sectionName.toLowerCase()}`, 'error');
+                });
         }
 
         // Save all settings at once
@@ -521,10 +552,10 @@
                 // Device Identification
                 node_id: parseInt(document.getElementById('node_id').value),
                 node_name: document.getElementById('node_name').value,
-                
+
                 // Radio Settings
                 frequency: parseInt(document.getElementById('frequency').value),
-                spreading_factor: parseInt(document.getElementById('spreading_factor').value),
+                spread_factor: parseInt(document.getElementById('spreading_factor').value),
                 bandwidth: parseInt(document.getElementById('bandwidth').value),
                 coding_rate: parseInt(document.getElementById('coding_rate').value),
                 tx_power: parseInt(document.getElementById('tx_power').value),
@@ -533,7 +564,7 @@
                 symbol_timeout: parseInt(document.getElementById('symbol_timeout').value),
                 enable_crc: document.getElementById('enable_crc').checked,
                 enable_ldro: document.getElementById('enable_ldro').checked,
-                
+
                 // Network Settings
                 ping_interval: parseInt(document.getElementById('ping_interval').value),
                 beacon_interval: parseInt(document.getElementById('beacon_interval').value),
@@ -543,19 +574,19 @@
                 ack_timeout: parseInt(document.getElementById('ack_timeout').value),
                 enable_self_healing: document.getElementById('enable_self_healing').checked,
                 healing_timeout: parseInt(document.getElementById('healing_timeout').value),
-                
+
                 // WiFi Settings
                 wifi_ssid: document.getElementById('wifi_ssid').value,
                 wifi_password: document.getElementById('wifi_password').value,
                 enable_web_server: document.getElementById('enable_web_server').checked,
                 web_port: parseInt(document.getElementById('web_port').value),
-                
+
                 // Security Settings
                 enable_encryption: document.getElementById('enable_encryption').checked,
                 aes_key: document.getElementById('aes_key').value,
                 iv: document.getElementById('iv').value
             };
-            
+
             fetch('/api/config', {
                 method: 'POST',
                 headers: {
@@ -563,18 +594,18 @@
                 },
                 body: JSON.stringify(allSettings)
             })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showToast('All settings saved successfully!');
-                } else {
-                    showToast(`Failed to save settings: ${data.message}`, 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error saving all settings:', error);
-                showToast('Failed to save all settings', 'error');
-            });
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast('All settings saved successfully!');
+                    } else {
+                        showToast(`Failed to save settings: ${data.message}`, 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error saving all settings:', error);
+                    showToast('Failed to save all settings', 'error');
+                });
         }
 
         // Reset to default settings
@@ -583,20 +614,20 @@
                 fetch('/api/config/reset', {
                     method: 'POST'
                 })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        showToast('Settings reset to defaults!');
-                        // Reload the default values
-                        setTimeout(loadCurrentSettings, 1000);
-                    } else {
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showToast('Settings reset to defaults!');
+                            // Reload the default values
+                            setTimeout(loadCurrentSettings, 1000);
+                        } else {
+                            showToast('Failed to reset settings', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error resetting settings:', error);
                         showToast('Failed to reset settings', 'error');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error resetting settings:', error);
-                    showToast('Failed to reset settings', 'error');
-                });
+                    });
             }
         }
 
@@ -604,4 +635,5 @@
         document.addEventListener('DOMContentLoaded', loadCurrentSettings);
     </script>
 </body>
+
 </html>

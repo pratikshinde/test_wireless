@@ -64,6 +64,13 @@ node_info_t *mesh_find_node(uint8_t id) {
     return NULL;
 }
 
+node_info_t *mesh_get_node_at_index(int index) {
+    if (index >= 0 && index < node_count) {
+        return &nodes[index];
+    }
+    return NULL;
+}
+
 void mesh_update_node_rssi(uint8_t id, int16_t rssi) {
     node_info_t *node = mesh_find_node(id);
     if (node) {
@@ -139,6 +146,16 @@ uint8_t mesh_get_node_count(void) {
 
 uint8_t mesh_get_route_count(void) {
     return route_count;
+}
+
+uint8_t mesh_get_active_route_count(void) {
+    uint8_t count = 0;
+    for (int i = 0; i < route_count; i++) {
+        if (routes[i].active) {
+            count++;
+        }
+    }
+    return count;
 }
 
 uint8_t mesh_get_online_count(void) {

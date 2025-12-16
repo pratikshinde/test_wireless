@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Devices</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div class="container">
         <!-- Navigation -->
@@ -83,16 +86,16 @@
                 // Load nodes
                 const nodesRes = await fetch('/api/nodes');
                 const nodes = await nodesRes.json();
-                
+
                 const devicesList = document.getElementById('devicesList');
                 devicesList.innerHTML = '';
-                
+
                 nodes.forEach(node => {
                     const deviceCard = document.createElement('div');
                     deviceCard.className = `device-card ${node.id === 1 ? 'master' : ''} ${!node.online ? 'offline' : ''}`;
-                    
-                    const timeAgo = Math.floor((Date.now()/1000 - node.last_seen/1000));
-                    
+
+                    const timeAgo = Math.floor((Date.now() / 1000 - node.last_seen / 1000));
+
                     deviceCard.innerHTML = `
                         <div class="device-icon">
                             <i class="fas ${node.id === 1 ? 'fa-crown' : 'fa-microchip'}"></i>
@@ -111,22 +114,22 @@
                             <span>${node.online ? 'Online' : 'Offline'}</span>
                         </div>
                     `;
-                    
+
                     deviceCard.onclick = () => showNodeDetails(node);
                     devicesList.appendChild(deviceCard);
                 });
-                
+
                 // Load routes
                 const routesRes = await fetch('/api/routes');
                 const routes = await routesRes.json();
-                
+
                 const tableBody = document.getElementById('routingTableBody');
                 tableBody.innerHTML = '';
-                
+
                 routes.forEach(route => {
                     const row = tableBody.insertRow();
-                    const timeAgo = Math.floor((Date.now()/1000 - route.last_update/1000));
-                    
+                    const timeAgo = Math.floor((Date.now() / 1000 - route.last_update / 1000));
+
                     row.innerHTML = `
                         <td>${route.destination}</td>
                         <td>${route.next_hop}</td>
@@ -145,21 +148,21 @@
                         </td>
                     `;
                 });
-                
+
             } catch (error) {
                 console.error('Error loading devices:', error);
             }
         }
-        
+
         // Show node details modal
         function showNodeDetails(node) {
             const modal = document.getElementById('nodeModal');
             const details = document.getElementById('nodeDetails');
-            
-            const timeAgo = Math.floor((Date.now()/1000 - node.last_seen/1000));
+
+            const timeAgo = Math.floor((Date.now() / 1000 - node.last_seen / 1000));
             const uptimeHours = Math.floor(node.uptime / 3600);
             const uptimeMinutes = Math.floor((node.uptime % 3600) / 60);
-            
+
             details.innerHTML = `
                 <div class="node-detail-section">
                     <h3><i class="fas fa-info-circle"></i> Basic Information</h3>
@@ -196,23 +199,23 @@
                     </div>
                 </div>
             `;
-            
+
             modal.style.display = 'block';
         }
-        
+
         // Close modal
         function closeModal() {
             document.getElementById('nodeModal').style.display = 'none';
         }
-        
+
         // Refresh devices
         function refreshDevices() {
             loadDevices();
         }
-        
+
         // Ping specific node
         function pingNode(nodeId) {
-            fetch(`/api/ping/${nodeId}`, {method: 'POST'})
+            fetch(`/api/ping/${nodeId}`, { method: 'POST' })
                 .then(() => {
                     alert(`Ping sent to Node ${nodeId}`);
                     closeModal();
@@ -222,31 +225,31 @@
                     alert('Error pinging node');
                 });
         }
-        
+
         // Send message to node
         function sendMessage(nodeId) {
             const message = prompt('Enter message to send:');
             if (message) {
                 fetch('/api/message', {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({to: nodeId, message: message})
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ to: nodeId, message: message })
                 })
-                .then(() => {
-                    alert(`Message sent to Node ${nodeId}`);
-                    closeModal();
-                })
-                .catch(error => {
-                    console.error('Error sending message:', error);
-                    alert('Error sending message');
-                });
+                    .then(() => {
+                        alert(`Message sent to Node ${nodeId}`);
+                        closeModal();
+                    })
+                    .catch(error => {
+                        console.error('Error sending message:', error);
+                        alert('Error sending message');
+                    });
             }
         }
-        
+
         // Remove node
         function removeNode(nodeId) {
             if (confirm(`Are you sure you want to remove Node ${nodeId}?`)) {
-                fetch(`/api/nodes/${nodeId}`, {method: 'DELETE'})
+                fetch(`/api/nodes/${nodeId}`, { method: 'DELETE' })
                     .then(() => {
                         alert(`Node ${nodeId} removed`);
                         closeModal();
@@ -258,16 +261,16 @@
                     });
             }
         }
-        
+
         // Initialize on load
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             loadDevices();
             // Refresh every 30 seconds
             setInterval(loadDevices, 30000);
         });
-        
+
         // Close modal when clicking outside
-        window.onclick = function(event) {
+        window.onclick = function (event) {
             const modal = document.getElementById('nodeModal');
             if (event.target == modal) {
                 closeModal();
@@ -275,4 +278,5 @@
         };
     </script>
 </body>
+
 </html>

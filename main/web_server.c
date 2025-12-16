@@ -16,6 +16,7 @@
 #include "config_manager.h"
 #include "mesh_manager.h"
 #include "mesh_types.h"
+#include "lora_mesh.h"
 
 
 static const char *TAG = "WEB_SERVER";
@@ -44,6 +45,13 @@ static esp_err_t post_ping_handler(httpd_req_t *req);
 static esp_err_t post_discover_handler(httpd_req_t *req);
 static esp_err_t favicon_handler(httpd_req_t *req);
 static esp_err_t test_handler(httpd_req_t *req);
+static esp_err_t post_config_handler(httpd_req_t *req);
+static esp_err_t get_config_api_handler(httpd_req_t *req);
+static esp_err_t post_config_direct_handler(httpd_req_t *req);
+static esp_err_t config_redirect_handler(httpd_req_t *req);
+static esp_err_t get_devices_api_handler(httpd_req_t *req);
+
+static esp_err_t get_config_api_handler(httpd_req_t *req);
 
 // Helper function to send JSON response
 static esp_err_t send_json_response(httpd_req_t *req, bool success, const char *message, cJSON *data) {
@@ -67,7 +75,16 @@ static esp_err_t send_json_response(httpd_req_t *req, bool success, const char *
     return ESP_OK;
 }
 
-// GET /config - Configuration endpoint
+// GET /config - Redirect to HTML page
+static esp_err_t config_redirect_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "Redirecting /config to /lora-config.html");
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "/lora-config.html");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+// GET /api/config - Actual JSON API
 static esp_err_t get_config_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "GET /config");
     
@@ -107,46 +124,95 @@ static esp_err_t get_config_handler(httpd_req_t *req) {
     return send_json_response(req, true, "Configuration loaded", data);
 }
 
+// GET /api/config - Actual JSON API
+static esp_err_t get_config_api_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "GET /api/config - Reading configuration");
+    
+    lora_config_t config;
+    esp_err_t err = config_load(&config);
+    
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to load config from NVS: %s", esp_err_to_name(err));
+        return send_json_response(req, false, "Failed to load configuration from storage", NULL);
+    }
+    
+    ESP_LOGI(TAG, "Config loaded: node_id=%d, node_name=%s", config.node_id, config.node_name);
+    
+    cJSON *data = cJSON_CreateObject();
+    cJSON_AddNumberToObject(data, "node_id", config.node_id);
+    cJSON_AddStringToObject(data, "node_name", config.node_name);
+    cJSON_AddNumberToObject(data, "frequency", config.frequency);
+    cJSON_AddNumberToObject(data, "spread_factor", config.spread_factor);
+    cJSON_AddNumberToObject(data, "bandwidth", config.bandwidth);
+    cJSON_AddNumberToObject(data, "coding_rate", config.coding_rate);
+    cJSON_AddNumberToObject(data, "tx_power", config.tx_power);
+    cJSON_AddNumberToObject(data, "sync_word", config.sync_word);
+    cJSON_AddNumberToObject(data, "ping_interval", config.ping_interval);
+    cJSON_AddNumberToObject(data, "beacon_interval", config.beacon_interval);
+    cJSON_AddNumberToObject(data, "route_timeout", config.route_timeout);
+    cJSON_AddNumberToObject(data, "max_hops", config.max_hops);
+    cJSON_AddBoolToObject(data, "enable_ack", config.enable_ack);
+    cJSON_AddNumberToObject(data, "ack_timeout", config.ack_timeout);
+    cJSON_AddBoolToObject(data, "enable_self_healing", config.enable_self_healing);
+    cJSON_AddNumberToObject(data, "healing_timeout", config.healing_timeout);
+    cJSON_AddStringToObject(data, "wifi_ssid", config.wifi_ssid);
+    cJSON_AddBoolToObject(data, "enable_web_server", config.enable_web_server);
+    cJSON_AddNumberToObject(data, "web_port", config.web_port);
+    cJSON_AddBoolToObject(data, "enable_encryption", config.enable_encryption);
+    cJSON_AddBoolToObject(data, "enable_crc", config.enable_crc);
+    cJSON_AddBoolToObject(data, "enable_ldro", config.enable_ldro);
+    cJSON_AddNumberToObject(data, "preamble_length", config.preamble_length);
+    cJSON_AddNumberToObject(data, "symbol_timeout", config.symbol_timeout);
+    
+    return send_json_response(req, true, "Configuration loaded successfully", data);
+}
+
 // GET /api/nodes - Mesh nodes
 static esp_err_t get_nodes_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "GET /api/nodes");
     
-    // Create sample nodes for testing
     cJSON *nodes_array = cJSON_CreateArray();
     
     // Add self
+    lora_config_t config;
+    config_load(&config); // Ideally cache this or use g_config if global
+    
     cJSON *self_node = cJSON_CreateObject();
-    cJSON_AddNumberToObject(self_node, "id", 1);
-    cJSON_AddStringToObject(self_node, "name", "Master");
+    cJSON_AddNumberToObject(self_node, "id", config.node_id);
+    cJSON_AddStringToObject(self_node, "name", config.node_name);
     cJSON_AddNumberToObject(self_node, "rssi", 0);
     cJSON_AddNumberToObject(self_node, "hops", 0);
     cJSON_AddStringToObject(self_node, "last_seen", "now");
     cJSON_AddBoolToObject(self_node, "online", true);
     cJSON_AddItemToArray(nodes_array, self_node);
     
-    // Add sample nodes
-    cJSON *node2 = cJSON_CreateObject();
-    cJSON_AddNumberToObject(node2, "id", 2);
-    cJSON_AddStringToObject(node2, "name", "Node-2");
-    cJSON_AddNumberToObject(node2, "rssi", -65);
-    cJSON_AddNumberToObject(node2, "hops", 1);
-    cJSON_AddStringToObject(node2, "last_seen", "30s ago");
-    cJSON_AddBoolToObject(node2, "online", true);
-    cJSON_AddItemToArray(nodes_array, node2);
-    
-    cJSON *node3 = cJSON_CreateObject();
-    cJSON_AddNumberToObject(node3, "id", 3);
-    cJSON_AddStringToObject(node3, "name", "Node-3");
-    cJSON_AddNumberToObject(node3, "rssi", -72);
-    cJSON_AddNumberToObject(node3, "hops", 2);
-    cJSON_AddStringToObject(node3, "last_seen", "1m ago");
-    cJSON_AddBoolToObject(node3, "online", true);
-    cJSON_AddItemToArray(nodes_array, node3);
+    // Add other nodes from mesh manager
+    int count = mesh_get_node_count();
+    for (int i = 0; i < count; i++) {
+        node_info_t *node = mesh_get_node_at_index(i);
+        if (node) {
+            cJSON *item = cJSON_CreateObject();
+            cJSON_AddNumberToObject(item, "id", node->id);
+            cJSON_AddStringToObject(item, "name", node->name);
+            cJSON_AddNumberToObject(item, "rssi", node->rssi);
+            cJSON_AddNumberToObject(item, "hops", node->hop_count);
+            
+            // Format time ago
+            uint32_t now = xTaskGetTickCount() * portTICK_PERIOD_MS;
+            uint32_t diff_sec = (now - node->last_seen) / 1000;
+            char time_str[32];
+            snprintf(time_str, sizeof(time_str), "%lus ago", diff_sec);
+            
+            cJSON_AddStringToObject(item, "last_seen", time_str);
+            cJSON_AddBoolToObject(item, "online", node->online);
+            cJSON_AddItemToArray(nodes_array, item);
+        }
+    }
     
     cJSON *data = cJSON_CreateObject();
     cJSON_AddItemToObject(data, "nodes", nodes_array);
-    cJSON_AddNumberToObject(data, "total", 3);
-    cJSON_AddNumberToObject(data, "online", 3);
+    cJSON_AddNumberToObject(data, "total", cJSON_GetArraySize(nodes_array));
+    cJSON_AddNumberToObject(data, "online", mesh_get_online_count() + 1); // +1 for self
     
     return send_json_response(req, true, "Nodes loaded", data);
 }
@@ -155,19 +221,23 @@ static esp_err_t get_nodes_handler(httpd_req_t *req) {
 static esp_err_t post_ping_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "POST /api/ping");
     
-    // In real implementation, send actual ping via LoRa
+    // Send broadcast ping
+    mesh_send_ping();
+    
     cJSON *data = cJSON_CreateObject();
     cJSON_AddStringToObject(data, "action", "ping_sent");
     cJSON_AddNumberToObject(data, "timestamp", xTaskGetTickCount() * portTICK_PERIOD_MS);
     
-    return send_json_response(req, true, "Ping sent to network", data);
+    return send_json_response(req, true, "Ping sent to mesh", data);
 }
 
 // POST /api/discover
 static esp_err_t post_discover_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "POST /api/discover");
     
-    // In real implementation, trigger network discovery
+    // Use ping for discovery for now
+    mesh_send_ping();
+    
     cJSON *data = cJSON_CreateObject();
     cJSON_AddStringToObject(data, "action", "discovery_started");
     cJSON_AddNumberToObject(data, "timestamp", xTaskGetTickCount() * portTICK_PERIOD_MS);
@@ -440,54 +510,7 @@ static esp_err_t get_devices_api_handler(httpd_req_t *req) {
     cJSON_Delete(response);
     return ESP_OK;
 }
-static esp_err_t config_redirect_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "Redirecting /config to /lora-config.html");
-    httpd_resp_set_status(req, "302 Found");
-    httpd_resp_set_hdr(req, "Location", "/lora-config.html");
-    httpd_resp_send(req, NULL, 0);
-    return ESP_OK;
-}
-static esp_err_t get_config_api_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET /api/config - Reading configuration");
-    
-    lora_config_t config;
-    esp_err_t err = config_load(&config);
-    
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to load config from NVS: %s", esp_err_to_name(err));
-        return send_json_response(req, false, "Failed to load configuration from storage", NULL);
-    }
-    
-    ESP_LOGI(TAG, "Config loaded: node_id=%d, node_name=%s", config.node_id, config.node_name);
-    
-    cJSON *data = cJSON_CreateObject();
-    cJSON_AddNumberToObject(data, "node_id", config.node_id);
-    cJSON_AddStringToObject(data, "node_name", config.node_name);
-    cJSON_AddNumberToObject(data, "frequency", config.frequency);
-    cJSON_AddNumberToObject(data, "spread_factor", config.spread_factor);
-    cJSON_AddNumberToObject(data, "bandwidth", config.bandwidth);
-    cJSON_AddNumberToObject(data, "coding_rate", config.coding_rate);
-    cJSON_AddNumberToObject(data, "tx_power", config.tx_power);
-    cJSON_AddNumberToObject(data, "sync_word", config.sync_word);
-    cJSON_AddNumberToObject(data, "ping_interval", config.ping_interval);
-    cJSON_AddNumberToObject(data, "beacon_interval", config.beacon_interval);
-    cJSON_AddNumberToObject(data, "route_timeout", config.route_timeout);
-    cJSON_AddNumberToObject(data, "max_hops", config.max_hops);
-    cJSON_AddBoolToObject(data, "enable_ack", config.enable_ack);
-    cJSON_AddNumberToObject(data, "ack_timeout", config.ack_timeout);
-    cJSON_AddBoolToObject(data, "enable_self_healing", config.enable_self_healing);
-    cJSON_AddNumberToObject(data, "healing_timeout", config.healing_timeout);
-    cJSON_AddStringToObject(data, "wifi_ssid", config.wifi_ssid);
-    cJSON_AddBoolToObject(data, "enable_web_server", config.enable_web_server);
-    cJSON_AddNumberToObject(data, "web_port", config.web_port);
-    cJSON_AddBoolToObject(data, "enable_encryption", config.enable_encryption);
-    cJSON_AddBoolToObject(data, "enable_crc", config.enable_crc);
-    cJSON_AddBoolToObject(data, "enable_ldro", config.enable_ldro);
-    cJSON_AddNumberToObject(data, "preamble_length", config.preamble_length);
-    cJSON_AddNumberToObject(data, "symbol_timeout", config.symbol_timeout);
-    
-    return send_json_response(req, true, "Configuration loaded successfully", data);
-}
+
 static esp_err_t post_config_direct_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "POST /config - Saving configuration");
     
@@ -782,6 +805,8 @@ static const httpd_uri_t post_config_uri = {
     .handler   = post_config_handler,  // The missing handler above
     .user_ctx  = NULL
 };
+
+
 
 // Start web server
 httpd_handle_t web_server_start(void) {

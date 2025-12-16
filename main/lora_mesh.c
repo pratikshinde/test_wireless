@@ -180,7 +180,7 @@ void lora_mesh_task(void *pvParameters) {
 
 // Send packet with encryption
 bool lora_send_packet(uint8_t dest, uint8_t *data, uint8_t len, msg_type_t type) {
-    if (len > 240) {
+    if (len > 220) { // Reduced max length to account for padding/overhead
         ESP_LOGE(TAG, "Packet too long: %d bytes", len);
         return false;
     }
@@ -188,24 +188,34 @@ bool lora_send_packet(uint8_t dest, uint8_t *data, uint8_t len, msg_type_t type)
     lora_packet_t packet;
     uint8_t packet_len = 0;
     
-    // Build packet header
-    packet.data[0] = current_config->node_id; // Source
-    packet.data[1] = dest;                    // Destination
-    packet.data[2] = type;                    // Message type
-    packet_len = 3;
+    // Build packet header and payload first (plaintext)
+    uint8_t plaintext[240];
+    plaintext[0] = current_config->node_id; // Source
+    plaintext[1] = dest;                    // Destination
+    plaintext[2] = type;                    // Message type
     
-    // Add data if any
     if (len > 0) {
-        memcpy(packet.data + 3, data, len);
-        packet_len += len;
+        memcpy(plaintext + 3, data, len);
     }
+    uint8_t plaintext_len = 3 + len;
     
     // Encrypt if enabled
     if (current_config->enable_encryption) {
         uint8_t encrypted[256];
-        if (encrypt_packet(packet.data, encrypted, packet_len)) {
-            memcpy(packet.data, encrypted, packet_len);
+        size_t encrypted_len = 0;
+        
+        if (encrypt_with_auto_padding(plaintext, plaintext_len, encrypted, &encrypted_len)) {
+            memcpy(packet.data, encrypted, encrypted_len);
+            packet_len = encrypted_len;
+            ESP_LOGD(TAG, "Encrypted %d -> %d bytes", plaintext_len, encrypted_len);
+        } else {
+            ESP_LOGE(TAG, "Encryption failed");
+            return false;
         }
+    } else {
+        // No encryption, just copy plaintext
+        memcpy(packet.data, plaintext, plaintext_len);
+        packet_len = plaintext_len;
     }
     
     packet.len = packet_len;

@@ -41,7 +41,7 @@ void app_main(void)
 
     // Load configuration from NVS
     config_init();
-    if (!config_load(&g_config)) {
+    if (config_load(&g_config) != ESP_OK) {
         ESP_LOGW(TAG, "No saved config found, using defaults");
         config_load_defaults(&g_config);
         config_save(&g_config);
@@ -49,6 +49,13 @@ void app_main(void)
         //debug_nvs_content();
     }
     config_print(&g_config);
+
+    // FIX: Ensure web server is enabled if it was disabled in saved config
+    if (!g_config.enable_web_server) {
+        ESP_LOGW(TAG, "Web server disabled in NVS. Auto-enabling for availability.");
+        g_config.enable_web_server = true;
+        config_save(&g_config);
+    }
 
     // Initialize encryption if enabled
     if (g_config.enable_encryption) {
@@ -64,17 +71,8 @@ void app_main(void)
     // Initialize mesh protocol
     mesh_protocol_init(&g_config);
 
-    // Start WiFi Access Point
+    // Start WiFi AP
     wifi_init_softap(&g_config);
-
-    // FIX: Always enable web server regardless of config
-    ESP_LOGI(TAG, "=== FORCE ENABLING WEB SERVER ===");
-    g_config.enable_web_server = true;
-    g_config.web_port = 80;
-    
-    // Save to NVS so it persists
-    config_save(&g_config);
-    ESP_LOGI(TAG, "Web server forced enabled and saved to NVS");
     
     // Print config to verify
     ESP_LOGI(TAG, "enable_web_server: %s", g_config.enable_web_server ? "true" : "false");

@@ -35,7 +35,7 @@ static lora_config_t default_config = {
     .healing_timeout = 30,      // seconds
     .wifi_ssid = "LoRa-Mesh",
     .wifi_password = "lora1234",
-    .enable_web_server = false,
+    .enable_web_server = true,
     .web_port = 80,
     .enable_encryption = false,
     .enable_crc = true,
@@ -405,63 +405,7 @@ esp_err_t config_load_defaults(lora_config_t *config) {
     return ESP_OK;
 }
 
-// Debug function to show NVS contents
-void debug_nvs_contents(void) {
-    nvs_handle_t handle;
-    esp_err_t err;
-    
-    ESP_LOGI(TAG, "=== NVS Configuration Debug ===");
-    
-    err = nvs_open("lora_config", NVS_READONLY, &handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(err));
-        return;
-    }
-    
-    // Test each key
-    uint8_t u8_value;
-    
-    // Test spread_factor specifically
-    err = nvs_get_u8(handle, KEY_SPREAD_FACTOR, &u8_value);
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
-        ESP_LOGW(TAG, "%s: KEY NOT FOUND in NVS", KEY_SPREAD_FACTOR);
-    } else if (err == ESP_OK) {
-        ESP_LOGI(TAG, "%s: FOUND = %d", KEY_SPREAD_FACTOR, u8_value);
-    } else {
-        ESP_LOGE(TAG, "%s: Error reading: %s", KEY_SPREAD_FACTOR, esp_err_to_name(err));
-    }
-    
-    // Test other problematic keys
-    err = nvs_get_u8(handle, KEY_ENABLE_HEALING, &u8_value);
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
-        ESP_LOGW(TAG, "%s: KEY NOT FOUND in NVS", KEY_ENABLE_HEALING);
-    } else if (err == ESP_OK) {
-        ESP_LOGI(TAG, "%s: FOUND = %d", KEY_ENABLE_HEALING, u8_value);
-    } else {
-        ESP_LOGE(TAG, "%s: Error reading: %s", KEY_ENABLE_HEALING, esp_err_to_name(err));
-    }
-    
-    err = nvs_get_u8(handle, KEY_ENABLE_WEB, &u8_value);
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
-        ESP_LOGW(TAG, "%s: KEY NOT FOUND in NVS", KEY_ENABLE_WEB);
-    } else if (err == ESP_OK) {
-        ESP_LOGI(TAG, "%s: FOUND = %d", KEY_ENABLE_WEB, u8_value);
-    } else {
-        ESP_LOGE(TAG, "%s: Error reading: %s", KEY_ENABLE_WEB, esp_err_to_name(err));
-    }
-    
-    err = nvs_get_u8(handle, KEY_ENABLE_ENC, &u8_value);
-    if (err == ESP_ERR_NVS_NOT_FOUND) {
-        ESP_LOGW(TAG, "%s: KEY NOT FOUND in NVS", KEY_ENABLE_ENC);
-    } else if (err == ESP_OK) {
-        ESP_LOGI(TAG, "%s: FOUND = %d", KEY_ENABLE_ENC, u8_value);
-    } else {
-        ESP_LOGE(TAG, "%s: Error reading: %s", KEY_ENABLE_ENC, esp_err_to_name(err));
-    }
-    
-    nvs_close(handle);
-    ESP_LOGI(TAG, "=== End Debug ===");
-}
+
 void debug_nvs_content(void) {
     nvs_handle_t handle;
     esp_err_t err;

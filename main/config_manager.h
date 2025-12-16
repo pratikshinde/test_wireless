@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "mesh_types.h"
-typedef int esp_err_t;
+#include "esp_err.h"
 
 
 // ==================== LoRa CONFIGURATION ====================
@@ -102,6 +102,5 @@ void mesh_get_statistics(uint8_t *total_nodes, uint8_t *online_nodes,
                          uint8_t *total_routes, uint8_t *active_routes);
 // Also add this to config_manager.h:
 void debug_nvs_content(void);
-void debug_nvs_content(void);
-void config_print(const lora_config_t *config);
+
 #endif // CONFIG_MANAGER_H

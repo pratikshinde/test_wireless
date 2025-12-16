@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoRa Mesh - Dashboard</title>
     <link rel="stylesheet" href="/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
+
 <body>
     <div class="container">
         <!-- Navigation -->
@@ -158,7 +161,7 @@
                 const nodesRes = await fetch('/api/nodes');
                 const nodes = await nodesRes.json();
                 document.getElementById('nodeCount').textContent = nodes.length;
-                
+
                 // Calculate average RSSI
                 let totalRssi = 0;
                 let count = 0;
@@ -169,21 +172,21 @@
                     }
                 });
                 document.getElementById('avgRssi').textContent = count > 0 ? Math.round(totalRssi / count) : 0;
-                
+
                 // Update route count
                 const routesRes = await fetch('/api/routes');
                 const routes = await routesRes.json();
                 let activeRoutes = routes.filter(route => route.active).length;
                 document.getElementById('routeCount').textContent = activeRoutes;
-                
+
                 // Update uptime (example)
                 document.getElementById('uptime').textContent = "24";
-                
+
             } catch (error) {
                 console.error('Error updating dashboard:', error);
             }
         }
-        
+
         function sendPing() {
             fetch('/api/ping', { method: 'POST' })
                 .then(response => {
@@ -193,7 +196,7 @@
                     console.error('Error sending ping:', error);
                 });
         }
-        
+
         function discoverNodes() {
             fetch('/api/discover', { method: 'POST' })
                 .then(response => {
@@ -203,27 +206,27 @@
                     console.error('Error discovering nodes:', error);
                 });
         }
-        
+
         function refreshNetwork() {
             updateDashboard();
             addActivity('Network data refreshed', 'info');
         }
-        
+
         function showConfig() {
             window.location.href = '/config';
         }
-        
+
         function addActivity(message, type) {
             const activityList = document.getElementById('activityList');
             const activityItem = document.createElement('div');
             activityItem.className = 'activity-item';
-            
-            const iconClass = type === 'tx' ? 'fas fa-paper-plane' : 
-                             type === 'rx' ? 'fas fa-broadcast-tower' : 
-                             'fas fa-info-circle';
-            const iconColor = type === 'tx' ? 'tx' : 
-                             type === 'rx' ? 'rx' : 'info';
-            
+
+            const iconClass = type === 'tx' ? 'fas fa-paper-plane' :
+                type === 'rx' ? 'fas fa-broadcast-tower' :
+                    'fas fa-info-circle';
+            const iconColor = type === 'tx' ? 'tx' :
+                type === 'rx' ? 'rx' : 'info';
+
             activityItem.innerHTML = `
                 <div class="activity-icon ${iconColor}">
                     <i class="${iconClass}"></i>
@@ -233,21 +236,22 @@
                     <span class="activity-time">Just now</span>
                 </div>
             `;
-            
+
             activityList.prepend(activityItem);
-            
+
             // Keep only last 10 activities
             while (activityList.children.length > 10) {
                 activityList.removeChild(activityList.lastChild);
             }
         }
-        
+
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             updateDashboard();
             // Update every 10 seconds
             setInterval(updateDashboard, 10000);
         });
     </script>
 </body>
+
 </html>
