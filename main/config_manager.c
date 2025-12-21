@@ -12,6 +12,7 @@
 
 #include "config_manager.h"
 #include "nvs_keys.h"
+#include "esp_mac.h"
 
 static const char *TAG = "CONFIG";
 
@@ -24,7 +25,7 @@ static lora_config_t default_config = {
     .bandwidth = 125000,        // 125 kHz
     .coding_rate = 5,           // 4/5
     .tx_power = 17,             // dBm
-    .sync_word = 0x12,
+    .sync_word = 0xF3,          // 0xF3 to avoid default 0x12 interference
     .ping_interval = 30,        // seconds
     .beacon_interval = 60,      // seconds
     .route_timeout = 300,       // seconds
@@ -55,6 +56,10 @@ static const uint8_t default_iv[16] = {
     0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10
 };
 
+// Configuration Cache
+static lora_config_t system_config;
+static bool config_cache_valid = false;
+
 // Forward declarations for static functions
 static esp_err_t load_config_from_nvs(lora_config_t *config);
 static esp_err_t save_config_to_nvs(const lora_config_t *config);
@@ -76,15 +81,25 @@ esp_err_t config_init(void) {
         ESP_LOGE(TAG, "Failed to initialize NVS: %s", esp_err_to_name(err));
         return err;
     }
+
+    // Set unique default SSID based on MAC Address
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    snprintf(default_config.wifi_ssid, sizeof(default_config.wifi_ssid), "LoRa-Mesh-%02X%02X", mac[4], mac[5]);
+    ESP_LOGI(TAG, "Default SSID set to: %s", default_config.wifi_ssid);
     
     // Check if configuration exists, if not save defaults
-    lora_config_t config;
-    err = load_config_from_nvs(&config);
+    // Check if configuration exists, if not save defaults
+    err = load_config_from_nvs(&system_config);
     if (err == ESP_ERR_NVS_NOT_FOUND) {
         ESP_LOGW(TAG, "No configuration found in NVS, saving defaults");
-        memcpy(default_config.aes_key, default_aes_key, sizeof(default_config.aes_key));
-        memcpy(default_config.iv, default_iv, sizeof(default_config.iv));
-        err = save_config_to_nvs(&default_config);
+        // Initialize from defaults
+        system_config = default_config;
+        memcpy(system_config.aes_key, default_aes_key, sizeof(system_config.aes_key));
+        memcpy(system_config.iv, default_iv, sizeof(system_config.iv));
+        
+        // Save to NVS
+        err = save_config_to_nvs(&system_config);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to save default configuration: %s", esp_err_to_name(err));
             return err;
@@ -94,8 +109,17 @@ esp_err_t config_init(void) {
         ESP_LOGE(TAG, "Failed to load configuration: %s", esp_err_to_name(err));
         return err;
     } else {
+        // Config exists. Check if we need to migrate the generic SSID
+        if (strcmp(system_config.wifi_ssid, "LoRa-Mesh") == 0) {
+            ESP_LOGW(TAG, "Migrating generic 'LoRa-Mesh' SSID to unique default: %s", default_config.wifi_ssid);
+            strcpy(system_config.wifi_ssid, default_config.wifi_ssid);
+            save_config_to_nvs(&system_config);
+        }
         ESP_LOGI(TAG, "Configuration loaded successfully");
     }
+    
+    // Mark cache as valid
+    config_cache_valid = true;
     
     return ESP_OK;
 }
@@ -359,15 +383,24 @@ esp_err_t config_load(lora_config_t *config) {
         return ESP_ERR_INVALID_ARG;
     }
     
-    // Load configuration from NVS
+    // Return cached configuration if valid
+    if (config_cache_valid) {
+        *config = system_config;
+        return ESP_OK;
+    }
+
+    // Fallback to NVS load if cache not valid (should rarely happen after init)
+    ESP_LOGW(TAG, "Cache invalid, loading from NVS");
     esp_err_t err = load_config_from_nvs(config);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to load config from NVS, using defaults");
-        *config = default_config;
-        memcpy(config->aes_key, default_aes_key, sizeof(config->aes_key));
-        memcpy(config->iv, default_iv, sizeof(config->iv));
+        config_load_defaults(config);
         return ESP_FAIL;
     }
+    
+    // Update cache
+    system_config = *config;
+    config_cache_valid = true;
     
     return ESP_OK;
 }
@@ -384,6 +417,10 @@ esp_err_t config_save(const lora_config_t *config) {
         ESP_LOGE(TAG, "Failed to save configuration to NVS");
         return err;
     }
+    
+    // Update Cache
+    system_config = *config;
+    config_cache_valid = true;
     
     ESP_LOGI(TAG, "Configuration saved successfully");
     return ESP_OK;

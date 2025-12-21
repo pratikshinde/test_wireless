@@ -3,314 +3,123 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Network Devices</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Devices - LoRa Mesh</title>
     <link rel="stylesheet" href="/styles.css">
-
 </head>
 
 <body>
     <div class="container">
-        <!-- Navigation -->
+        <!-- Desktop Navbar -->
         <nav class="navbar">
             <div class="nav-brand">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M21 3L3 21v-2l16-16h2zm-4 4l-4 4 1.41 1.41 4-4L17 7zm-4 4l-4 4 1.41 1.41 4-4L13 11z" />
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
                 </svg>
-                <span>LoRa Mesh Network</span>
+                <span>LoRa Mesh</span>
             </div>
             <div class="nav-menu">
-                <a href="/" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                        viewBox="0 0 24 24" fill="currentColor">
-                        <path
-                            d="M12 4a9 9 0 0 1 9 9h-2a7 7 0 0 0-7-7 7 7 0 0 0-7 7H3a9 9 0 0 1 9-9zm0 5l2 5-2 1-2-1 2-5z" />
-                    </svg> Dashboard</a>
-                <a href="/config" class="nav-link"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
-                        viewBox="0 0 24 24" fill="currentColor">
-                        <path
-                            d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
-                    </svg> LoRa Config</a>
-                <a href="/devices" class="nav-link active"><svg xmlns="http://www.w3.org/2000/svg" width="16"
-                        height="16" viewBox="0 0 24 24" fill="currentColor">
-                        <path
-                            d="M20 16h-4v-2.07l-2.9-2.9C15.5 10.3 17 8.35 17 6c0-2.76-2.24-5-5-5S7 3.24 7 6c0 2.35 1.5 4.3 3.9 5.03l-2.9 2.9V16H4c-1.1 0-2 .9-2 2v4h4v-2h2v2h4v-2h2v2h4v-2h2v2h4v-4c0-1.1-.9-2-2-2zm-8-9c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" />
-                    </svg> Devices</a>
+                <a href="/" class="nav-link">Dashboard</a>
+                <a href="/lora-config.html" class="nav-link">Config</a>
+                <a href="/devices.html" class="nav-link active">Devices</a>
             </div>
             <div class="nav-status">
                 <span class="status-indicator online"></span>
-                <span>Node <span id="nodeId">...</span></span>
+                <span id="nodeIdDisplay">Node --</span>
             </div>
         </nav>
 
-        <!-- Devices Content -->
-        <div class="devices-container">
-            <div class="devices-header">
-                <h1><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                        fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h1 class="headline-large">Devices</h1>
+            <div class="refresh-timer" onclick="loadDevices()" title="Click to refresh immediately"
+                style="cursor: pointer; position: relative; width: 36px; height: 36px;">
+                <svg viewBox="0 0 36 36" class="circular-chart">
+                    <path class="circle-bg"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <path class="circle" id="refreshSpinner" stroke-dasharray="0, 100"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    <g transform="translate(9, 9) scale(0.5)">
                         <path
-                            d="M20 16h-4v-2.07l-2.9-2.9C15.5 10.3 17 8.35 17 6c0-2.76-2.24-5-5-5S7 3.24 7 6c0 2.35 1.5 4.3 3.9 5.03l-2.9 2.9V16H4c-1.1 0-2 .9-2 2v4h4v-2h2v2h4v-2h2v2h4v-2h2v2h4v-4c0-1.1-.9-2-2-2zm-8-9c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z" />
-                    </svg> Network Devices</h1>
-                <button class="btn btn-primary" onclick="refreshDevices()">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                        fill="currentColor">
-                        <path
-                            d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" />
-                    </svg> Refresh
-                </button>
+                            d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"
+                            fill="#FFF" />
+                    </g>
+                </svg>
             </div>
+        </div>
 
-            <!-- Devices List -->
-            <div class="devices-list" id="devicesList">
-                <!-- Devices will be loaded here -->
+        <div id="devicesList">
+            <!-- Devices Populated by JS -->
+            <div class="text-center text-muted body-large mt-5">Loading devices...</div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                Route Map
             </div>
-
-            <!-- Routing Table -->
-            <div class="routing-table">
-                <h2><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                        fill="currentColor" style="vertical-align: middle; margin-right: 8px;">
-                        <path
-                            d="M19 15.18V7c0-2.21-1.79-4-4-4s-4 1.79-4 4v10c0 2.21-1.79 4-4 4s-4-1.79-4-4V5.82h2V17c0 1.1.9 2 2 2s2-.9 2-2V7c0-1.1.9-2 2-2s2 .9 2 2v8.18h2z" />
-                    </svg> Routing Table</h2>
-                <table>
+            <div style="overflow-x: auto;">
+                <table class="routing-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr>
-                            <th>Destination</th>
-                            <th>Next Hop</th>
-                            <th>Hops</th>
-                            <th>Link Quality</th>
-                            <th>Last Update</th>
-                            <th>Status</th>
+                        <tr style="text-align: left; border-bottom: 2px solid rgba(255,255,255,0.1);">
+                            <th style="padding: 12px;">Dest</th>
+                            <th style="padding: 12px;">Next Hop</th>
+                            <th style="padding: 12px;">Hops</th>
+                            <th style="padding: 12px;">RSSI</th>
+                            <th style="padding: 12px;">Status</th>
                         </tr>
                     </thead>
                     <tbody id="routingTableBody">
-                        <!-- Routes will be loaded here -->
+                        <!-- Routes Populated by JS -->
                     </tbody>
                 </table>
-            </div>
-
-            <!-- Node Details Modal -->
-            <div id="nodeModal" class="modal">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h2>Node Details</h2>
-                        <span class="close" onclick="closeModal()">&times;</span>
-                    </div>
-                    <div class="modal-body" id="nodeDetails">
-                        <!-- Node details will be loaded here -->
-                    </div>
-                </div>
             </div>
         </div>
     </div>
 
-    <script src="/script.js?v=2"></script>
+    <!-- Node Detail Modal -->
+    <div id="nodeModal"
+        style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; backdrop-filter: blur(5px);">
+        <div
+            style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--sys-color-surface); padding: 24px; border-radius: 24px; min-width: 300px; max-width: 90%; box-shadow: 0 0 50px rgba(0,229,255,0.2);">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2 class="headline-medium">Node Details</h2>
+                <button onclick="closeModal()"
+                    style="background: none; border: none; color: white; font-size: 24px;">&times;</button>
+            </div>
+            <div id="nodeDetails"></div>
+        </div>
+    </div>
+
+    <!-- Mobile Bottom Nav -->
+    <nav class="bottom-nav">
+        <a href="/" class="bottom-nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z" />
+            </svg>
+            Dashboard
+        </a>
+        <a href="/lora-config.html" class="bottom-nav-item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+            </svg>
+            Config
+        </a>
+        <a href="/devices.html" class="bottom-nav-item active">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                <path
+                    d="M3.27 3L2 4.27l5 5V13h3v9l3.58-6.14L17.73 20 19 18.73 3.27 3zM17 10h-4l4 4h-4v2h2v-2h4v-2h-2v2h-4v-4c0-1.1-.9-2-2-2zm-5 5H8v2h4v-2z" />
+            </svg>
+            Devices
+        </a>
+    </nav>
+    <script src="/script.js?v=6"></script>
     <script>
-        // Inline fallback to ensure Node ID updates
-        fetch('/api/config')
-            .then(r => r.json())
-            .then(data => {
-                if (data.success && data.data.node_id && document.getElementById('nodeId')) {
-                    document.getElementById('nodeId').textContent = data.data.node_id;
-                }
-            })
-            .catch(e => console.log('Inline ID fetch failed', e));
-
-        // Load devices and routes
-        async function loadDevices() {
-            try {
-                // Load nodes
-                const nodesRes = await fetch('/api/nodes');
-                const nodes = await nodesRes.json();
-
-                const devicesList = document.getElementById('devicesList');
-                devicesList.innerHTML = '';
-
-                nodes.forEach(node => {
-                    const deviceCard = document.createElement('div');
-                    deviceCard.className = `device-card ${node.id === 1 ? 'master' : ''} ${!node.online ? 'offline' : ''}`;
-
-                    const timeAgo = Math.floor((Date.now() / 1000 - node.last_seen / 1000));
-
-                    deviceCard.innerHTML = `
-                        <div class="device-icon">
-                            ${node.id === 1 ? getIcon('crown') : getIcon('microchip')}
-                        </div>
-                        <div class="device-info">
-                            <h3>${node.name}</h3>
-                            <p>ID: ${node.id} ${node.id === 1 ? '(Master)' : '(Slave)'}</p>
-                            <div class="device-stats">
-                                <span class="stat">${getIcon('signal')} ${node.rssi} dBm</span>
-                                <span class="stat">${getIcon('route')} ${node.hop_count} hops</span>
-                                <span class="stat">${getIcon('clock')} ${timeAgo}s ago</span>
-                            </div>
-                        </div>
-                        <div class="device-status">
-                            <span class="status-indicator ${node.online ? 'online' : 'offline'}"></span>
-                            <span>${node.online ? 'Online' : 'Offline'}</span>
-                        </div>
-                    `;
-
-                    deviceCard.onclick = () => showNodeDetails(node);
-                    devicesList.appendChild(deviceCard);
-                });
-
-                // Load routes
-                const routesRes = await fetch('/api/routes');
-                const routes = await routesRes.json();
-
-                const tableBody = document.getElementById('routingTableBody');
-                tableBody.innerHTML = '';
-
-                routes.forEach(route => {
-                    const row = tableBody.insertRow();
-                    const timeAgo = Math.floor((Date.now() / 1000 - route.last_update / 1000));
-
-                    row.innerHTML = `
-                        <td>${route.destination}</td>
-                        <td>${route.next_hop}</td>
-                        <td>${route.hop_count}</td>
-                        <td>
-                            <div class="quality-bar">
-                                <div class="quality-fill" style="width: ${Math.min(100, (route.link_quality + 130) * 2)}%"></div>
-                            </div>
-                            ${route.link_quality} dBm
-                        </td>
-                        <td>${timeAgo}s ago</td>
-                        <td>
-                            <span class="status-badge ${route.active ? 'active' : 'inactive'}">
-                                ${route.active ? 'Active' : 'Inactive'}
-                            </span>
-                        </td>
-                    `;
-                });
-
-            } catch (error) {
-                console.error('Error loading devices:', error);
+        fetch('/api/config').then(r => r.json()).then(data => {
+            if (data.success && data.data.node_id) {
+                document.getElementById('nodeIdDisplay').textContent = "Node " + data.data.node_id;
             }
-        }
-
-        // Show node details modal
-        function showNodeDetails(node) {
-            const modal = document.getElementById('nodeModal');
-            const details = document.getElementById('nodeDetails');
-
-            const timeAgo = Math.floor((Date.now() / 1000 - node.last_seen / 1000));
-            const uptimeHours = Math.floor(node.uptime / 3600);
-            const uptimeMinutes = Math.floor((node.uptime % 3600) / 60);
-
-            details.innerHTML = `
-                <div class="node-detail-section">
-                    <h3>${getIcon('info_circle')} Basic Information</h3>
-                    <p><strong>Node ID:</strong> ${node.id}</p>
-                    <p><strong>Name:</strong> ${node.name}</p>
-                    <p><strong>Role:</strong> ${node.id === 1 ? 'Master' : 'Slave'}</p>
-                    <p><strong>Status:</strong> <span class="status-badge ${node.online ? 'active' : 'inactive'}">
-                        ${node.online ? 'Online' : 'Offline'}
-                    </span></p>
-                </div>
-                
-                <div class="node-detail-section">
-                    <h3>${getIcon('chart_line')} Performance Metrics</h3>
-                    <p><strong>RSSI:</strong> ${node.rssi} dBm</p>
-                    <p><strong>Hop Count:</strong> ${node.hop_count}</p>
-                    <p><strong>Last Seen:</strong> ${timeAgo} seconds ago</p>
-                    <p><strong>Uptime:</strong> ${uptimeHours}h ${uptimeMinutes}m</p>
-                </div>
-                
-                <div class="node-detail-section">
-                    <h3>${getIcon('cog')} Actions</h3>
-                    <div class="action-buttons">
-                        <button class="btn btn-small" onclick="pingNode(${node.id})">
-                            ${getIcon('bullhorn')} Ping Node
-                        </button>
-                        <button class="btn btn-small" onclick="sendMessage(${node.id})">
-                            ${getIcon('envelope')} Send Message
-                        </button>
-                        ${node.id !== 1 ? `
-                            <button class="btn btn-small btn-danger" onclick="removeNode(${node.id})">
-                                ${getIcon('trash')} Remove Node
-                            </button>
-                        ` : ''}
-                    </div>
-                </div>
-            `;
-
-            modal.style.display = 'block';
-        }
-
-        // Close modal
-        function closeModal() {
-            document.getElementById('nodeModal').style.display = 'none';
-        }
-
-        // Refresh devices
-        function refreshDevices() {
-            loadDevices();
-        }
-
-        // Ping specific node
-        function pingNode(nodeId) {
-            fetch(`/api/ping/${nodeId}`, { method: 'POST' })
-                .then(() => {
-                    alert(`Ping sent to Node ${nodeId}`);
-                    closeModal();
-                })
-                .catch(error => {
-                    console.error('Error pinging node:', error);
-                    alert('Error pinging node');
-                });
-        }
-
-        // Send message to node
-        function sendMessage(nodeId) {
-            const message = prompt('Enter message to send:');
-            if (message) {
-                fetch('/api/message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ to: nodeId, message: message })
-                })
-                    .then(() => {
-                        alert(`Message sent to Node ${nodeId}`);
-                        closeModal();
-                    })
-                    .catch(error => {
-                        console.error('Error sending message:', error);
-                        alert('Error sending message');
-                    });
-            }
-        }
-
-        // Remove node
-        function removeNode(nodeId) {
-            if (confirm(`Are you sure you want to remove Node ${nodeId}?`)) {
-                fetch(`/api/nodes/${nodeId}`, { method: 'DELETE' })
-                    .then(() => {
-                        alert(`Node ${nodeId} removed`);
-                        closeModal();
-                        loadDevices();
-                    })
-                    .catch(error => {
-                        console.error('Error removing node:', error);
-                        alert('Error removing node');
-                    });
-            }
-        }
-
-        // Initialize on load
-        document.addEventListener('DOMContentLoaded', function () {
-            loadDevices();
-            // Refresh every 30 seconds
-            setInterval(loadDevices, 30000);
         });
-
-        // Close modal when clicking outside
-        window.onclick = function (event) {
-            const modal = document.getElementById('nodeModal');
-            if (event.target == modal) {
-                closeModal();
-            }
-        };
     </script>
 </body>
 

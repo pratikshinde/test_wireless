@@ -102,15 +102,16 @@ bool rfm95w_init(int cs, int rst, int dio0) {
     };
     
     spi_device_interface_config_t devcfg = {
-        .clock_speed_hz = 500000,
-        .mode = 0,
-        .spics_io_num = cs_pin,
-        .queue_size = 7,
-        .flags = 0,  // Full duplex
-        .pre_cb = NULL
+        .clock_speed_hz = 500000,           // 500 kHz (safe speed)
+        .mode = 3,                          // SPI Mode 3 (CPOL=1, CPHA=1)
+        .spics_io_num = cs_pin,             // CS pin
+        .queue_size = 7,                    // Transaction queue size
+        .flags = 0,                         // No flags (using standard SPI)
+        .pre_cb = NULL,
+        .post_cb = NULL,
     };
     
-    esp_err_t ret = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_DISABLED);  // Disable DMA
+    esp_err_t ret = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);  // Enable DMA
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
         return false;
@@ -152,7 +153,22 @@ bool rfm95w_init(int cs, int rst, int dio0) {
     write_reg(REG_OP_MODE, 0x80);
     vTaskDelay(pdMS_TO_TICKS(10));
     
+    // Fix FIFO pointers
+    write_reg(REG_FIFO_TX_BASE_ADDR, 0x00);
+    write_reg(REG_FIFO_RX_BASE_ADDR, 0x00);
+
+    // Force InvertIQ OFF (Default)
+    write_reg(REG_INVERTIQ, 0x27);
+    write_reg(REG_INVERTIQ2, 0x1D);
+    
+    // Log modem config for debugging
+    ESP_LOGI(TAG, "Modem Config: 1=0x%02X 2=0x%02X 3=0x%02X", 
+             read_reg(REG_MODEM_CONFIG_1), 
+             read_reg(REG_MODEM_CONFIG_2), 
+             read_reg(REG_MODEM_CONFIG_3));
+    
     ESP_LOGI(TAG, "RFM95W initialized successfully");
+    
     return true;
 }
 
@@ -194,7 +210,8 @@ void rfm95w_set_bandwidth(uint32_t bw) {
     else bw_value = 8;  // 250kHz
     
     uint8_t config1 = read_reg(REG_MODEM_CONFIG_1);
-    config1 = (config1 & 0x0F) | (bw_value << 4);
+    // Explicitly clear Bit 0 to enforce Explicit Header Mode
+    config1 = (config1 & 0x0E) | (bw_value << 4);
     write_reg(REG_MODEM_CONFIG_1, config1);
 }
 
@@ -203,7 +220,9 @@ void rfm95w_set_coding_rate(uint8_t cr) {
     if (cr < 5 || cr > 8) cr = 5;
     
     uint8_t config1 = read_reg(REG_MODEM_CONFIG_1);
-    config1 = (config1 & 0xF1) | ((cr - 5) << 1);
+    // Explicitly clear Bit 0 to enforce Explicit Header Mode
+    // Correct calculation for CR: 4/5(5)->0x02, 4/6(6)->0x04, etc.
+    config1 = (config1 & 0xF0) | ((cr - 4) << 1);
     write_reg(REG_MODEM_CONFIG_1, config1);
 }
 
@@ -247,6 +266,10 @@ void rfm95w_set_crc(bool enable) {
 // Set LDRO
 void rfm95w_set_ldro(bool enable) {
     uint8_t config3 = read_reg(REG_MODEM_CONFIG_3);
+    
+    // FORCE AGC ON (Bit 2 = 0x04)
+    config3 |= 0x04; 
+    
     if (enable) {
         config3 |= 0x08;
     } else {
@@ -269,8 +292,17 @@ bool rfm95w_check_rx(void) {
 bool rfm95w_receive_packet(uint8_t *buffer, uint8_t *len, int16_t *rssi, int8_t *snr) {
     uint8_t irq_flags = read_reg(REG_IRQ_FLAGS);
     
+    // Check if RxDone is set
     if (!(irq_flags & 0x40)) {
-        return false; // No packet received
+        return false;
+    }
+
+    // Check for CRC error (Bit 5)
+    if (irq_flags & 0x20) {
+        ESP_LOGW(TAG, "Packet received with CRC error");
+        // Clear IRQ flags and return false
+        write_reg(REG_IRQ_FLAGS, 0xFF);
+        return false;
     }
     
     // Clear IRQ flags
@@ -287,9 +319,26 @@ bool rfm95w_receive_packet(uint8_t *buffer, uint8_t *len, int16_t *rssi, int8_t 
     uint8_t current_addr = read_reg(REG_FIFO_RX_CURRENT_ADDR);
     write_reg(REG_FIFO_ADDR_PTR, current_addr);
     
-    for (int i = 0; i < *len; i++) {
-        buffer[i] = read_reg(REG_FIFO);
+    // Burst read the entire packet
+    uint8_t tx_buf[257] = {0}; // 1 byte addr + 256 bytes max data
+    uint8_t rx_buf[257] = {0};
+    
+    tx_buf[0] = REG_FIFO & 0x7F; // Read command for FIFO
+    
+    spi_transaction_t t = {
+        .length = 8 * (*len + 1),  // Total bits: 8 bit addr + 8*len bits data
+        .tx_buffer = tx_buf,
+        .rx_buffer = rx_buf,
+        .flags = 0 // Full duplex
+    };
+    
+    if (spi_device_polling_transmit(spi_handle, &t) != ESP_OK) {
+        ESP_LOGE(TAG, "SPI burst read failed");
+        return false;
     }
+    
+    // Copy data from rx_buf (skipping the first byte which is response to addr)
+    memcpy(buffer, &rx_buf[1], *len);
     
     // Read RSSI and SNR
     *rssi = -157 + read_reg(REG_PKT_RSSI_VALUE);
@@ -320,9 +369,46 @@ bool rfm95w_send_packet(uint8_t *data, uint8_t len) {
     // Set FIFO pointer
     write_reg(REG_FIFO_ADDR_PTR, 0x00);
     
-    // Write packet to FIFO
-    for (int i = 0; i < len; i++) {
-        write_reg(REG_FIFO, data[i]);
+    // Burst write the entire packet
+    uint8_t tx_buf[257] = {0};
+    tx_buf[0] = REG_FIFO | 0x80; // Write command
+    memcpy(&tx_buf[1], data, len);
+    
+    spi_transaction_t t = {
+        .length = 8 * (len + 1),
+        .tx_buffer = tx_buf,
+        .rx_buffer = NULL,
+        .flags = 0
+    };
+    
+    if (spi_device_polling_transmit(spi_handle, &t) != ESP_OK) {
+        ESP_LOGE(TAG, "SPI burst write failed");
+        return false;
+    }
+
+    // DEBUG: Verify FIFO content (Readback Check)
+    write_reg(REG_FIFO_ADDR_PTR, 0x00);
+    
+    uint8_t rb_tx[257] = {0};
+    uint8_t rb_rx[257] = {0};
+    rb_tx[0] = REG_FIFO & 0x7F; // Read command
+    
+    spi_transaction_t t_rb = {
+        .length = 8 * (len + 1),
+        .tx_buffer = rb_tx,
+        .rx_buffer = rb_rx,
+        .flags = 0
+    };
+    
+    spi_device_polling_transmit(spi_handle, &t_rb);
+    
+    // Compare (skip first byte of rx which is address response)
+    if (memcmp(&rb_rx[1], data, len) != 0) {
+        ESP_LOGE(TAG, "FIFO CORRUPTION DETECTED DURING WRITE!");
+        ESP_LOG_BUFFER_HEX("WROTE", data, len);
+        ESP_LOG_BUFFER_HEX("READ", &rb_rx[1], len);
+    } else {
+        // ESP_LOGI(TAG, "FIFO Write Verified OK");
     }
     
     // Set payload length
@@ -348,4 +434,13 @@ bool rfm95w_send_packet(uint8_t *data, uint8_t len) {
     write_reg(REG_OP_MODE, 0x85);
     
     return true;
+}
+
+// Dump registers for debug
+void rfm95w_dump_registers(void) {
+    ESP_LOGI(TAG, "--- RFM95W REG DUMP (Late) ---");
+    for(int i=0x01; i<=0x42; i++) {
+        ESP_LOGI(TAG, "Reg 0x%02X: 0x%02X", i, read_reg(i));
+    }
+    ESP_LOGI(TAG, "--- END DUMP ---");
 }

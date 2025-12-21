@@ -29,4 +29,7 @@ int16_t rfm95w_get_current_rssi(void);
 bool rfm95w_is_channel_free(int16_t threshold);
 bool rfm95w_send_packet(uint8_t *data, uint8_t len);
 
+// Debug
+void rfm95w_dump_registers(void);
+
 #endif // RFM95W_H

@@ -92,10 +92,16 @@ void mesh_handle_packet(lora_packet_t *packet) {
         case MSG_ROUTE_REPLY:
             handle_route_reply(packet);
             break;
+
+        case MSG_CONFIG_SYNC:
+            // handle_config_sync(packet);
+            ESP_LOGD(TAG, "Config sync packet received (ignored)");
+            break;
             
         default:
-            ESP_LOGW(TAG, "Unknown packet type: 0x%02X from %d", 
-                    packet->type, packet->src);
+            ESP_LOGW(TAG, "Unknown packet type: 0x%02X from %d (len=%d)", 
+                    packet->type, packet->src, packet->len);
+            ESP_LOG_BUFFER_HEX_LEVEL(TAG, packet->data, packet->len, ESP_LOG_WARN);
             break;
     }
 }
@@ -132,13 +138,19 @@ static void handle_ping_packet(lora_packet_t *packet) {
     ping_packet_t *ping = (ping_packet_t *)packet->data;
     
     // Send pong response
+    // FIX: Echo the Sender's timestamp back so Sender can calculate RTT
     pong_packet_t pong = {
         .node_id = current_config->node_id,
         .ping_sequence = ping->sequence,
-        .timestamp_ms = esp_timer_get_time() / 1000,
-        .rtt_ms = (esp_timer_get_time() / 1000) - ping->timestamp_ms
+        .timestamp_ms = ping->timestamp_ms, // Echo original timestamp
+        .rtt_ms = 0 // Not used in packet
     };
     
+    // Add random jitter to prevent collision (0-1000ms)
+    // Only blocking this task is fine as it's the mesh handling task
+    uint32_t delay_ms = esp_random() % 1000;
+    vTaskDelay(pdMS_TO_TICKS(delay_ms));
+
     lora_send_packet(ping->node_id, (uint8_t*)&pong, sizeof(pong_packet_t), MSG_PONG);
 }
 
@@ -149,7 +161,13 @@ static void handle_pong_packet(lora_packet_t *packet) {
     // Update node latency information
     if (packet->len >= sizeof(pong_packet_t)) {
         pong_packet_t *pong = (pong_packet_t *)packet->data;
-        ESP_LOGI(TAG, "Pong from %d: RTT=%dms", pong->node_id, pong->rtt_ms);
+        
+        // Calculate RTT locally
+        uint32_t now = esp_timer_get_time() / 1000;
+        uint32_t rtt = now - pong->timestamp_ms;
+        
+        ESP_LOGI(TAG, "Pong from %d: RTT=%lums (Seq=%d)", 
+                 pong->node_id, rtt, pong->ping_sequence);
     }
 }
 
@@ -161,7 +179,7 @@ static void handle_data_packet(lora_packet_t *packet) {
     if (packet->dest == current_config->node_id) {
         // Process data
         ESP_LOGI(TAG, "Data packet from %d: %d bytes", 
-                packet->src, packet->len - 3);
+                packet->src, packet->len);
         
         // TODO: Handle application data
     } 

@@ -40,6 +40,9 @@ bool lora_mesh_init(lora_config_t *config) {
     }
     
     // Configure LoRa parameters
+    // FORCE SYNC WORD UPDATE (Temporary Debug)
+    config->sync_word = 0x12; 
+    
     rfm95w_set_frequency(config->frequency);
     rfm95w_set_spreading_factor(config->spread_factor);
     rfm95w_set_bandwidth(config->bandwidth);
@@ -69,7 +72,14 @@ bool lora_mesh_init(lora_config_t *config) {
              config->bandwidth,
              config->coding_rate,
              config->tx_power);
-    
+             
+    ESP_LOGI(TAG, "NODE ID: %d | NODE NAME: %s", config->node_id, config->node_name);
+    ESP_LOGI(TAG, "ENCRYPTION: %s", config->enable_encryption ? "ENABLED" : "DISABLED");
+    if (config->enable_encryption) {
+         ESP_LOGI(TAG, "AES Key (first 4 bytes): %02X %02X %02X %02X", 
+                  config->aes_key[0], config->aes_key[1], config->aes_key[2], config->aes_key[3]);
+    }
+
     return true;
 }
 
@@ -96,7 +106,20 @@ void wifi_init_softap(lora_config_t *config) {
     };
     
     strcpy((char*)wifi_config.ap.ssid, config->wifi_ssid);
-    strcpy((char*)wifi_config.ap.password, config->wifi_password);
+    
+    // Check password length for WPA2
+    if (strlen(config->wifi_password) < 8) {
+        if (strlen(config->wifi_password) == 0) {
+            wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+            wifi_config.ap.password[0] = 0;
+        } else {
+             // Fallback to default if invalid length but not empty
+            ESP_LOGW(TAG, "WiFi password too short, using default");
+            strcpy((char*)wifi_config.ap.password, "12345678"); 
+        }
+    } else {
+        strcpy((char*)wifi_config.ap.password, config->wifi_password);
+    }
     
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
@@ -108,8 +131,12 @@ void wifi_init_softap(lora_config_t *config) {
 // Main mesh task
 void lora_mesh_task(void *pvParameters) {
     lora_config_t *config = (lora_config_t *)pvParameters;
-    int64_t last_beacon_ms = 0;
-    int64_t last_ping_ms = 0;
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    
+    // Initialize timers with random offsets to prevent synchronization
+    int64_t last_beacon_ms = now_ms - (esp_random() % (config->beacon_interval * 1000));
+    // For master, ensure ping doesn't perfectly align with beacon
+    int64_t last_ping_ms = now_ms - (esp_random() % (config->ping_interval * 1000));
     
     // Start in RX continuous mode
     rfm95w_set_mode(RFM95W_MODE_RXCONTINUOUS);
@@ -126,6 +153,10 @@ void lora_mesh_task(void *pvParameters) {
             {
                 uint8_t decrypted[256];
                 size_t decrypted_len = 0;
+                
+                // Debug: Log raw packet
+                ESP_LOGI(TAG, "RX RAW (%d bytes) RSSI:%d SNR:%d", packet.len, packet.rssi, packet.snr);
+                ESP_LOG_BUFFER_HEX(TAG, packet.data, packet.len);
                 
                 // Decrypt if enabled
                 if (current_config->enable_encryption && packet.len >= 16) {
@@ -146,6 +177,12 @@ void lora_mesh_task(void *pvParameters) {
                     packet.dest = packet.data[1];
                     packet.type = packet.data[2];
                     
+                    // Strip header from data so handlers see only payload
+                    if (packet.len > 3) {
+                        memmove(packet.data, packet.data + 3, packet.len - 3);
+                    }
+                    packet.len -= 3;
+
                     // Process packet
                     mesh_handle_packet(&packet);
                 }
@@ -197,6 +234,8 @@ void lora_mesh_task(void *pvParameters) {
         }
         
         vTaskDelay(10 / portTICK_PERIOD_MS);
+        
+
     }
 }
 
@@ -239,6 +278,10 @@ bool lora_send_packet(uint8_t dest, uint8_t *data, uint8_t len, msg_type_t type)
         memcpy(packet.data, plaintext, plaintext_len);
         packet_len = plaintext_len;
     }
+    
+    // DEBUG: Log what we are queuing for transmission
+    ESP_LOGI(TAG, "TX QUEUE (%d bytes):", packet_len);
+    ESP_LOG_BUFFER_HEX(TAG, packet.data, packet_len);
     
     packet.len = packet_len;
     packet.dest = dest;

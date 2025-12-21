@@ -292,35 +292,52 @@ function loadNetworkStats() {
 }
 
 function updateNetworkStats(data) {
-    // Update stats counters
-    const totalEl = document.getElementById('totalNodes');
-    if (totalEl) totalEl.textContent = data.total || 0;
-
-    const onlineEl = document.getElementById('onlineNodes');
+    // Update stats counters targeting CORRECT IDs in dashboard.html
+    const onlineEl = document.getElementById('nodeCount');
     if (onlineEl) onlineEl.textContent = data.online || 0;
 
-    const offlineEl = document.getElementById('offlineNodes');
-    if (offlineEl) offlineEl.textContent = (data.total || 0) - (data.online || 0);
-
-    // Update node list table
-    const tableBody = document.getElementById('nodeTableBody');
-    if (tableBody && data.nodes) {
-        tableBody.innerHTML = '';
-
-        data.nodes.forEach(node => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${node.id}</td>
-                <td>${node.name || 'Unknown'}</td>
-                <td><span class="status-badge ${node.online ? 'online' : 'offline'}">
-                    ${node.online ? 'Online' : 'Offline'}
-                </span></td>
-                <td>${node.rssi || 0} dBm</td>
-                <td>${node.hops || 0}</td>
-                <td>${node.last_seen || 'Unknown'}</td>
-            `;
-            tableBody.appendChild(row);
+    // Calculate Avg RSSI
+    let totalRssi = 0;
+    let count = 0;
+    if (data.nodes) {
+        data.nodes.forEach(n => {
+            if (n.rssi != 0) { totalRssi += n.rssi; count++; }
         });
+    }
+    const avg = count > 0 ? Math.round(totalRssi / count) : 0;
+    const rssiEl = document.getElementById('avgRssi');
+    if (rssiEl) rssiEl.textContent = avg === 0 ? "--" : avg;
+
+    // Populate Activity List (Recent Activity)
+    const activityList = document.getElementById('activityList');
+    if (activityList && data.nodes) {
+        activityList.innerHTML = '';
+
+        if (data.nodes.length === 0) {
+            activityList.innerHTML = '<div style="padding:10px; color:#888;">No recent activity</div>';
+        } else {
+            // Sort by online status first? Or just list them.
+            data.nodes.forEach(node => {
+                const div = document.createElement('div');
+                div.className = 'activity-item';
+                div.style.cssText = "display:flex; justify-content:space-between; align-items:center; padding: 12px; border-bottom: 1px solid rgba(255,255,255,0.05);";
+
+                const icon = node.id === 1 ? getIcon('crown') : getIcon('signal');
+                const statusColor = node.online ? 'var(--sys-color-success)' : 'var(--sys-color-error)';
+
+                div.innerHTML = `
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="color:${statusColor}">${icon}</span>
+                        <span>
+                            <div style="font-weight:500;">${node.name || 'Node ' + node.id} (ID: ${node.id})</div>
+                            <div style="font-size:0.8em; opacity:0.7;">RSSI: ${node.rssi} dBm | Hops: ${node.hops}</div>
+                        </span>
+                    </div>
+                    <span class="text-muted" style="font-size:0.9em;">${node.last_seen}</span>
+                 `;
+                activityList.appendChild(div);
+            });
+        }
     }
 }
 
@@ -497,6 +514,71 @@ function initConfigPage() {
         bandSelect.addEventListener('change', updateFrequencyOptions);
         updateFrequencyOptions();
     }
+
+    // Initialize Airtime Calculator
+    initAirtimeCalculator();
+}
+
+function initAirtimeCalculator() {
+    const inputs = ['spreading_factor', 'bandwidth', 'coding_rate', 'preamble_length', 'enable_crc', 'enable_ldro'];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', calculateAirtime);
+            el.addEventListener('input', calculateAirtime);
+        }
+    });
+    // Delay initial calc to allow form population
+    setTimeout(calculateAirtime, 1000);
+}
+
+function calculateAirtime() {
+    const display = document.getElementById('airtimeValue');
+    if (!display) return;
+
+    // Get parameters
+    const sfEl = document.getElementById('spreading_factor');
+    const bwEl = document.getElementById('bandwidth');
+    const crEl = document.getElementById('coding_rate');
+    const plEl = document.getElementById('preamble_length');
+    const crcEl = document.getElementById('enable_crc');
+    const ldroEl = document.getElementById('enable_ldro');
+
+    if (!sfEl || !bwEl || !crEl) return;
+
+    const SF = parseInt(sfEl.value) || 7;
+    const BW = parseInt(bwEl.value) || 125000;
+    const CR = (parseInt(crEl.value) || 5) - 4; // 5->1 (4/5), 8->4 (4/8)
+    const PL = 32; // Fixed Payload Length (bytes)
+    const Preamble = parseInt(plEl ? plEl.value : 8) || 8;
+    const CRC = (crcEl && crcEl.checked) ? 1 : 0; // Usually CRC on
+    const IH = 0; // Explicit Header (0)
+    const DE = (ldroEl && ldroEl.checked) ? 1 : 0; // Low Data Rate Optimize
+
+    // Symbol time
+    const Tsym = Math.pow(2, SF) / BW; // seconds
+
+    // Preamble time
+    const Tpreamble = (Preamble + 4.25) * Tsym;
+
+    // Payload symbol count
+    // Formula: 8 + max(ceil((8*PL - 4*SF + 28 + 16*CRC - 20*IH) / (4*(SF - 2*DE))) * (CR+4), 0)
+    const numerator = 8 * PL - 4 * SF + 28 + 16 * CRC - 20 * IH;
+    const denominator = 4 * (SF - 2 * DE);
+    const innerTerm = Math.ceil(numerator / denominator) * (CR + 4);
+    const PayloadSymbNb = 8 + Math.max(innerTerm, 0);
+
+    // Payload time
+    const Tpayload = PayloadSymbNb * Tsym;
+
+    // Total time
+    const Tpacket = (Tpreamble + Tpayload) * 1000; // ms
+
+    display.textContent = Tpacket.toFixed(2) + ' ms';
+
+    // Warn if airtime is very high (>2s)
+    if (Tpacket > 2000) display.style.color = 'var(--sys-color-error)';
+    else display.style.color = '';
 }
 
 // Frequency Bands Definition
@@ -594,6 +676,8 @@ function loadCurrentConfig() {
                     document.getElementById('nodeId').textContent = data.data.node_id || 1;
                 }
                 showToast('✅ Configuration loaded successfully', 'success');
+                // Update airtime after load
+                calculateAirtime();
             } else {
                 console.error('Invalid response format:', data);
                 showToast('Failed to load configuration: Invalid response', 'error');
@@ -686,7 +770,19 @@ function populateConfigForm(config) {
         const element = document.getElementById(field);
         if (element && config[field] !== undefined) {
             if (element.type !== 'checkbox') {
-                element.value = config[field];
+                if (field === 'sync_word') {
+                    // Convert to hex for display
+                    element.value = '0x' + Number(config[field]).toString(16).toUpperCase().padStart(2, '0');
+                } else if (field === 'aes_key' || field === 'iv') {
+                    // Convert byte array or string to hex
+                    if (Array.isArray(config[field])) {
+                        element.value = config[field].map(b => b.toString(16).toUpperCase().padStart(2, '0')).join('');
+                    } else {
+                        element.value = config[field];
+                    }
+                } else {
+                    element.value = config[field];
+                }
             }
             // Update displays
             const displayElement = document.getElementById(field + 'Display');
@@ -708,6 +804,17 @@ function populateConfigForm(config) {
     });
 
     console.log('Configuration form populated');
+
+    // Initialize security fields visibility
+    toggleSecurityFields();
+}
+
+function toggleSecurityFields() {
+    const isEnabled = document.getElementById('enable_encryption').checked;
+    const fieldsDiv = document.getElementById('securityFields');
+    if (fieldsDiv) {
+        fieldsDiv.style.display = isEnabled ? 'block' : 'none';
+    }
 }
 
 function loadSampleConfig() {
@@ -775,12 +882,25 @@ function saveConfiguration(event) {
 
     for (let element of formElements) {
         if (element.name && element.type !== 'button' && element.type !== 'submit') {
+            const name = element.name;
+            const value = element.value;
+
             if (element.type === 'checkbox') {
-                formData[element.name] = element.checked;
-                console.log(`${element.name}: ${element.checked ? 'true' : 'false'}`);
-            } else if (element.value !== undefined) {
-                formData[element.name] = element.value;
-                console.log(`${element.name}: ${element.value}`);
+                formData[name] = element.checked;
+                console.log(`${name}: ${element.checked}`);
+            } else if (value !== undefined) {
+                // Handle numeric fields
+                if (element.type === 'number' || element.type === 'range') {
+                    formData[name] = value === '' ? 0 : Number(value);
+                }
+                // Handle numeric selects and special fields
+                else if (['spread_factor', 'bandwidth', 'coding_rate', 'tx_power', 'max_hops', 'sync_word'].includes(name)) {
+                    formData[name] = Number(value);
+                }
+                else {
+                    formData[name] = value;
+                }
+                console.log(`${name}: ${formData[name]} (${typeof formData[name]})`);
             }
         }
     }
@@ -798,51 +918,62 @@ function saveConfiguration(event) {
     })
         .then(response => {
             console.log('Save response status:', response.status, response.statusText);
-            if (!response.ok) {
-                console.log('POST /api/config failed, trying POST /config');
-                // Try POST /config as fallback
-                return fetch('/config', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json'
-                    },
-                    body: JSON.stringify(formData)
-                });
-            }
-            return response;
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-            console.log('Save response data:', data);
-            if (data.success) {
-                showToast('✅ Configuration saved successfully!', 'success');
-                // Reload to verify
-                setTimeout(loadCurrentConfig, 1000);
+
+            if (response.ok) {
+                showToast('Configuration saved successfully', 'success');
+                // Reload to reflect changes after short delay
+                setTimeout(() => window.location.reload(), 1500);
             } else {
-                showToast(`❌ Save failed: ${data.message || 'Unknown error'}`, 'error');
+                showToast('Failed to save configuration', 'error');
             }
         })
         .catch(error => {
             console.error('Save error:', error);
-            showToast(`❌ Save failed: ${error.message}`, 'error');
-
-            // Try one more fallback - regular form submission
-            console.log('Trying form fallback...');
-            form.submit();
+            showToast('Error saving configuration', 'error');
         })
         .finally(() => {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Save Configuration';
+                submitBtn.textContent = 'Save Settings'; // Reset button text
+                // Check which button was clicked effectively? 
+                // Actually the textContent logic above is a bit generic.
+                // Better to restore original text or just "Save".
             }
         });
 }
+
+function generateAESKey() {
+    // Generate 32 random hex characters (16 bytes)
+    const charset = '0123456789ABCDEF';
+    let key = '';
+    for (let i = 0; i < 32; i++) {
+        const randomIndex = Math.floor(Math.random() * charset.length);
+        key += charset[randomIndex];
+    }
+    document.getElementById('aes_key').value = key;
+    showToast('New AES Key generated', 'success');
+}
+
+function copyToClipboard(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    // Select the text field
+    el.select();
+    el.setSelectionRange(0, 99999); // For mobile devices
+
+    // Copy the text
+    try {
+        navigator.clipboard.writeText(el.value).then(() => {
+            showToast('Copied to clipboard', 'success');
+        });
+    } catch (err) {
+        // Fallback
+        document.execCommand('copy');
+        showToast('Copied to clipboard', 'success');
+    }
+}
+
 
 function resetToDefaults() {
     if (confirm('Reset all settings to default values?')) {
@@ -864,57 +995,66 @@ function resetToDefaults() {
 
 // ==================== DEVICES PAGE ====================
 
+let refreshTimer = null;
+const REFRESH_INTERVAL = 10000;
+
+function startAutoRefresh() {
+    if (refreshTimer) clearInterval(refreshTimer);
+    const startTime = Date.now();
+
+    refreshTimer = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min((elapsed / REFRESH_INTERVAL) * 100, 100);
+
+        const spinner = document.getElementById('refreshSpinner');
+        if (spinner) {
+            spinner.setAttribute('stroke-dasharray', `${progress}, 100`);
+        }
+
+        if (elapsed >= REFRESH_INTERVAL) {
+            clearInterval(refreshTimer);
+            loadDevices();
+        }
+    }, 100);
+}
+
 function initDevicesPage() {
     console.log('Initializing devices page...');
-
-    // Load initial device list
     loadDevices();
-
-    // Set up refresh interval
-    setInterval(loadDevices, 10000);
 
     // Set up search functionality
     const searchInput = document.getElementById('deviceSearch');
     if (searchInput) {
         searchInput.addEventListener('input', filterDevices);
     }
-
-    // Set up refresh button
-    const refreshBtn = document.getElementById('refreshDevices');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadDevices);
-    }
 }
 
 function loadDevices() {
-    const refreshBtn = document.getElementById('refreshDevices');
-    if (refreshBtn) {
-        refreshBtn.disabled = true;
-        refreshBtn.textContent = 'Refreshing...';
-    }
+    // Visual feedback: Change spinner color during load
+    const spinner = document.querySelector('.circle');
+    if (spinner) spinner.style.stroke = 'var(--sys-color-secondary)';
 
     fetch('/api/nodes')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 updateDeviceList(data.data);
-                showToast(`Loaded ${data.data.total} devices`, 'success');
+                if (data.data.routes) updateRoutingTable(data.data.routes);
             }
         })
         .catch(error => {
             console.error('Error loading devices:', error);
-            showToast('Failed to load devices', 'error');
+            // Only toast on error
+            showToast('Failed to connect to device', 'error');
         })
         .finally(() => {
-            if (refreshBtn) {
-                refreshBtn.disabled = false;
-                refreshBtn.textContent = 'Refresh Devices';
-            }
+            if (spinner) spinner.style.stroke = ''; // Reset color
+            startAutoRefresh();
         });
 }
 
 function updateDeviceList(data) {
-    const container = document.getElementById('deviceList');
+    const container = document.getElementById('devicesList');
     if (!container) return;
 
     if (!data.nodes || data.nodes.length === 0) {
@@ -922,65 +1062,59 @@ function updateDeviceList(data) {
         return;
     }
 
-    let html = '';
+    // Table View Construction
+    let html = `
+    <div class="card">
+        <div style="overflow-x: auto;">
+            <table class="routing-table" style="width: 100%; border-collapse: collapse; min-width: 600px;">
+                <thead>
+                    <tr style="text-align: left; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.2);">
+                        <th style="padding:12px;">ID</th>
+                        <th style="padding:12px;">Name</th>
+                        <th style="padding:12px;">Status</th>
+                        <th style="padding:12px;">Signal</th>
+                        <th style="padding:12px;">Hops</th>
+                        <th style="padding:12px;">Last Seen</th>
+                        <th style="padding:12px; text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
 
     data.nodes.forEach(device => {
         const lastSeen = device.last_seen || 'Unknown';
-        const signalStrength = getSignalStrength(device.rssi);
+        const rowBg = device.online ? 'rgba(76, 175, 80, 0.05)' : 'rgba(255, 255, 255, 0.02)';
 
         html += `
-            <div class="device-card" data-id="${device.id}" data-name="${device.name || ''}">
-                <div class="device-header">
-                    <div class="device-icon">
-                        ${device.id === 1 ? getIcon('crown') : getIcon('microchip')}
-                    </div>
-                    <div class="device-info">
-                        <h3 class="device-name">${device.name || `Node ${device.id}`}</h3>
-                        <div class="device-id">ID: ${device.id}</div>
-                    </div>
-                    <div class="device-status ${device.online ? 'online' : 'offline'}">
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); background: ${rowBg};">
+                <td style="padding:12px;"><strong>${device.id}</strong></td>
+                <td style="padding:12px;">${device.name || '-'}</td>
+                <td style="padding:12px;">
+                    <span class="status-badge ${device.online ? 'online' : 'offline'}">
                         ${device.online ? 'Online' : 'Offline'}
-                    </div>
-                </div>
-                
-                <div class="device-details">
-                    <div class="detail-row">
-                        <span class="detail-label">Signal:</span>
-                        <span class="detail-value">
-                            <div class="signal-strength ${signalStrength}">
-                                <div class="signal-bar"></div>
-                                <div class="signal-bar"></div>
-                                <div class="signal-bar"></div>
-                                <div class="signal-bar"></div>
-                                <div class="signal-bar"></div>
-                            </div>
-                            ${device.rssi || 0} dBm
-                        </span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Hops:</span>
-                        <span class="detail-value">${device.hops || 0}</span>
-                    </div>
-                    <div class="detail-row">
-                        <span class="detail-label">Last Seen:</span>
-                        <span class="detail-value">${lastSeen}</span>
-                    </div>
-                </div>
-                
-                <div class="device-actions">
-                    <button class="btn btn-sm btn-info ping-device" data-id="${device.id}">
+                    </span>
+                </td>
+                <td style="padding:12px;">
+                    <span style="display:flex; align-items:center; gap:6px;">
+                        ${getIcon('signal')} ${device.rssi} dBm
+                    </span>
+                </td>
+                <td style="padding:12px;">${device.hops}</td>
+                <td style="padding:12px;">${lastSeen}</td>
+                <td style="padding:12px; text-align:right;">
+                    <button class="btn btn-sm btn-info ping-device" data-id="${device.id}" style="padding:4px 12px; margin-left:4px;">
                         Ping
                     </button>
-                    <button class="btn btn-sm btn-warning restart-device" data-id="${device.id}" ${device.id === 1 ? 'disabled' : ''}>
-                        Restart
-                    </button>
-                    <button class="btn btn-sm btn-danger remove-device" data-id="${device.id}" ${device.id === 1 ? 'disabled' : ''}>
+                    ${device.id !== 1 ? `
+                    <button class="btn btn-sm btn-danger remove-device" data-id="${device.id}" style="padding:4px 12px; margin-left:4px;">
                         Remove
-                    </button>
-                </div>
-            </div>
+                    </button>` : ''}
+                </td>
+            </tr>
         `;
     });
+
+    html += `</tbody></table></div></div>`;
 
     container.innerHTML = html;
 
@@ -992,19 +1126,41 @@ function updateDeviceList(data) {
         });
     });
 
-    document.querySelectorAll('.restart-device').forEach(btn => {
-        btn.addEventListener('click', function () {
-            const deviceId = this.getAttribute('data-id');
-            restartDevice(deviceId);
-        });
-    });
-
     document.querySelectorAll('.remove-device').forEach(btn => {
         btn.addEventListener('click', function () {
             const deviceId = this.getAttribute('data-id');
             removeDevice(deviceId);
         });
     });
+}
+
+function updateRoutingTable(routes) {
+    const tbody = document.getElementById('routingTableBody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+
+    if (!routes || routes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:20px; color:#888;">No active routes found</td></tr>';
+        return;
+    }
+
+    let html = '';
+    routes.forEach(route => {
+        html += `
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                <td style="padding:12px;">Node ${route.dest}</td>
+                <td style="padding:12px;">Node ${route.next}</td>
+                <td style="padding:12px;">${route.hops}</td>
+                <td style="padding:12px;">${route.rssi} dBm</td>
+                <td style="padding:12px;">
+                    <span class="status-badge online" style="font-size:0.85em;">${route.status}</span>
+                </td>
+            </tr>
+        `;
+    });
+
+    tbody.innerHTML = html;
 }
 
 function getSignalStrength(rssi) {
@@ -1137,4 +1293,19 @@ if (typeof window !== 'undefined') {
         sendPing: sendPing,
         discoverNodes: discoverNodes
     };
+    // Expose functions required by HTML inline handlers
+    window.saveConfig = function (section) {
+        console.log('Saving config section:', section);
+        const form = document.getElementById('configForm');
+        if (form) {
+            // Create a synthetic event to reuse existing logic
+            const event = {
+                preventDefault: () => { },
+                target: form
+            };
+            saveConfiguration(event);
+        }
+    };
+    window.factoryReset = resetToDefaults;
+    window.refreshDevices = loadDevices; // For backward compatibility / ease of use
 }

@@ -39,7 +39,6 @@ static esp_err_t lora_config_html_handler(httpd_req_t *req);
 static esp_err_t devices_html_handler(httpd_req_t *req);
 static esp_err_t styles_css_handler(httpd_req_t *req);
 static esp_err_t script_js_handler(httpd_req_t *req);
-static esp_err_t get_config_handler(httpd_req_t *req);
 static esp_err_t get_nodes_handler(httpd_req_t *req);
 static esp_err_t post_ping_handler(httpd_req_t *req);
 static esp_err_t post_discover_handler(httpd_req_t *req);
@@ -85,8 +84,9 @@ static esp_err_t config_redirect_handler(httpd_req_t *req) {
 }
 
 // GET /api/config - Actual JSON API
-static esp_err_t get_config_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET /config");
+// GET /api/config - Actual JSON API
+static esp_err_t get_config_api_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "GET /api/config");
     
     lora_config_t config;
     esp_err_t err = config_load(&config);
@@ -118,54 +118,22 @@ static esp_err_t get_config_handler(httpd_req_t *req) {
     cJSON_AddBoolToObject(data, "enable_encryption", config.enable_encryption);
     cJSON_AddBoolToObject(data, "enable_crc", config.enable_crc);
     cJSON_AddBoolToObject(data, "enable_ldro", config.enable_ldro);
+    
+    // Add Security Keys (as arrays)
+    cJSON *key_array = cJSON_CreateArray();
+    for(int i=0; i<16; i++) cJSON_AddItemToArray(key_array, cJSON_CreateNumber(config.aes_key[i]));
+    cJSON_AddItemToObject(data, "aes_key", key_array);
+
+    cJSON *iv_array = cJSON_CreateArray();
+    for(int i=0; i<16; i++) cJSON_AddItemToArray(iv_array, cJSON_CreateNumber(config.iv[i]));
+    cJSON_AddItemToObject(data, "iv", iv_array);
     cJSON_AddNumberToObject(data, "preamble_length", config.preamble_length);
     cJSON_AddNumberToObject(data, "symbol_timeout", config.symbol_timeout);
     
     return send_json_response(req, true, "Configuration loaded", data);
 }
 
-// GET /api/config - Actual JSON API
-static esp_err_t get_config_api_handler(httpd_req_t *req) {
-    ESP_LOGI(TAG, "GET /api/config - Reading configuration");
-    
-    lora_config_t config;
-    esp_err_t err = config_load(&config);
-    
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to load config from NVS: %s", esp_err_to_name(err));
-        return send_json_response(req, false, "Failed to load configuration from storage", NULL);
-    }
-    
-    ESP_LOGI(TAG, "Config loaded: node_id=%d, node_name=%s", config.node_id, config.node_name);
-    
-    cJSON *data = cJSON_CreateObject();
-    cJSON_AddNumberToObject(data, "node_id", config.node_id);
-    cJSON_AddStringToObject(data, "node_name", config.node_name);
-    cJSON_AddNumberToObject(data, "frequency", config.frequency);
-    cJSON_AddNumberToObject(data, "spread_factor", config.spread_factor);
-    cJSON_AddNumberToObject(data, "bandwidth", config.bandwidth);
-    cJSON_AddNumberToObject(data, "coding_rate", config.coding_rate);
-    cJSON_AddNumberToObject(data, "tx_power", config.tx_power);
-    cJSON_AddNumberToObject(data, "sync_word", config.sync_word);
-    cJSON_AddNumberToObject(data, "ping_interval", config.ping_interval);
-    cJSON_AddNumberToObject(data, "beacon_interval", config.beacon_interval);
-    cJSON_AddNumberToObject(data, "route_timeout", config.route_timeout);
-    cJSON_AddNumberToObject(data, "max_hops", config.max_hops);
-    cJSON_AddBoolToObject(data, "enable_ack", config.enable_ack);
-    cJSON_AddNumberToObject(data, "ack_timeout", config.ack_timeout);
-    cJSON_AddBoolToObject(data, "enable_self_healing", config.enable_self_healing);
-    cJSON_AddNumberToObject(data, "healing_timeout", config.healing_timeout);
-    cJSON_AddStringToObject(data, "wifi_ssid", config.wifi_ssid);
-    cJSON_AddBoolToObject(data, "enable_web_server", config.enable_web_server);
-    cJSON_AddNumberToObject(data, "web_port", config.web_port);
-    cJSON_AddBoolToObject(data, "enable_encryption", config.enable_encryption);
-    cJSON_AddBoolToObject(data, "enable_crc", config.enable_crc);
-    cJSON_AddBoolToObject(data, "enable_ldro", config.enable_ldro);
-    cJSON_AddNumberToObject(data, "preamble_length", config.preamble_length);
-    cJSON_AddNumberToObject(data, "symbol_timeout", config.symbol_timeout);
-    
-    return send_json_response(req, true, "Configuration loaded successfully", data);
-}
+
 
 // GET /api/nodes - Mesh nodes
 static esp_err_t get_nodes_handler(httpd_req_t *req) {
@@ -187,10 +155,16 @@ static esp_err_t get_nodes_handler(httpd_req_t *req) {
     cJSON_AddItemToArray(nodes_array, self_node);
     
     // Add other nodes from mesh manager
+    int online_count = 1; // Start with 1 for Self
     int count = mesh_get_node_count();
     for (int i = 0; i < count; i++) {
         node_info_t *node = mesh_get_node_at_index(i);
         if (node) {
+            // Skip self to prevent duplicates
+            if (node->id == config.node_id) {
+                continue;
+            }
+
             cJSON *item = cJSON_CreateObject();
             cJSON_AddNumberToObject(item, "id", node->id);
             cJSON_AddStringToObject(item, "name", node->name);
@@ -206,13 +180,34 @@ static esp_err_t get_nodes_handler(httpd_req_t *req) {
             cJSON_AddStringToObject(item, "last_seen", time_str);
             cJSON_AddBoolToObject(item, "online", node->online);
             cJSON_AddItemToArray(nodes_array, item);
+            
+            if (node->online) {
+                online_count++;
+            }
+        }
+    }
+    
+    // Add routes
+    cJSON *routes_array = cJSON_CreateArray();
+    int route_count = mesh_get_route_count();
+    for (int i = 0; i < route_count; i++) {
+        route_info_t *route = mesh_get_route(i);
+        if (route && route->active) {
+            cJSON *r_item = cJSON_CreateObject();
+            cJSON_AddNumberToObject(r_item, "dest", route->dest_id);
+            cJSON_AddNumberToObject(r_item, "next", route->next_hop);
+            cJSON_AddNumberToObject(r_item, "hops", route->hop_count);
+            cJSON_AddNumberToObject(r_item, "rssi", route->link_quality); // Using link_quality as RSSI metric for the route
+            cJSON_AddStringToObject(r_item, "status", route->active ? "Active" : "Expired");
+            cJSON_AddItemToArray(routes_array, r_item);
         }
     }
     
     cJSON *data = cJSON_CreateObject();
     cJSON_AddItemToObject(data, "nodes", nodes_array);
+    cJSON_AddItemToObject(data, "routes", routes_array);
     cJSON_AddNumberToObject(data, "total", cJSON_GetArraySize(nodes_array));
-    cJSON_AddNumberToObject(data, "online", mesh_get_online_count() + 1); // +1 for self
+    cJSON_AddNumberToObject(data, "online", online_count);
     
     return send_json_response(req, true, "Nodes loaded", data);
 }
@@ -367,120 +362,102 @@ static esp_err_t post_config_handler(httpd_req_t *req) {
     esp_err_t err = config_load(&new_config);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Could not load existing config, using defaults");
-        // Set reasonable defaults
-        memset(&new_config, 0, sizeof(lora_config_t));
-        strcpy(new_config.node_name, "LoRa-Node");
-        new_config.frequency = 868.0;
-        new_config.spread_factor = 7;
-        new_config.bandwidth = 125;
-        new_config.coding_rate = 5;
-        new_config.tx_power = 17;
-        new_config.ping_interval = 60;
-        new_config.beacon_interval = 30;
-        new_config.web_port = 80;
+        config_load_defaults(&new_config);
     }
     
     // Update with new values from JSON
     cJSON *item;
     
-    if ((item = cJSON_GetObjectItem(root, "node_id")) && cJSON_IsNumber(item)) {
-        new_config.node_id = item->valueint;
-    }
+    // Helper macros for flexible JSON parsing (handles numbers as numbers or strings)
+    #define JSON_GET_INT(key, target) \
+        item = cJSON_GetObjectItem(root, key); \
+        if (item) { \
+            if (cJSON_IsNumber(item)) target = item->valueint; \
+            else if (cJSON_IsString(item)) target = atoi(item->valuestring); \
+        }
+
+    #define JSON_GET_DOUBLE(key, target) \
+        item = cJSON_GetObjectItem(root, key); \
+        if (item) { \
+            if (cJSON_IsNumber(item)) target = item->valuedouble; \
+            else if (cJSON_IsString(item)) target = atof(item->valuestring); \
+        }
+        
+    #define JSON_GET_BOOL(key, target) \
+        item = cJSON_GetObjectItem(root, key); \
+        if (item) { \
+            if (cJSON_IsBool(item)) target = cJSON_IsTrue(item); \
+            else if (cJSON_IsString(item)) { \
+                target = (strcmp(item->valuestring, "true") == 0 || strcmp(item->valuestring, "1") == 0); \
+            } \
+            else if (cJSON_IsNumber(item)) target = (item->valueint != 0); \
+        }
+
+    JSON_GET_INT("node_id", new_config.node_id);
     
     if ((item = cJSON_GetObjectItem(root, "node_name")) && cJSON_IsString(item)) {
         strncpy(new_config.node_name, item->valuestring, sizeof(new_config.node_name) - 1);
         new_config.node_name[sizeof(new_config.node_name) - 1] = '\0';
     }
     
-    if ((item = cJSON_GetObjectItem(root, "frequency")) && cJSON_IsNumber(item)) {
-        new_config.frequency = item->valuedouble;
-    }
+    JSON_GET_DOUBLE("frequency", new_config.frequency);
+    JSON_GET_INT("spread_factor", new_config.spread_factor);
+    JSON_GET_INT("bandwidth", new_config.bandwidth);
+    JSON_GET_INT("coding_rate", new_config.coding_rate);
+    JSON_GET_INT("tx_power", new_config.tx_power);
+    JSON_GET_INT("sync_word", new_config.sync_word);
+    JSON_GET_INT("ping_interval", new_config.ping_interval);
+    JSON_GET_INT("beacon_interval", new_config.beacon_interval);
+    JSON_GET_INT("route_timeout", new_config.route_timeout);
+    JSON_GET_INT("max_hops", new_config.max_hops);
     
-    if ((item = cJSON_GetObjectItem(root, "spread_factor")) && cJSON_IsNumber(item)) {
-        new_config.spread_factor = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "bandwidth")) && cJSON_IsNumber(item)) {
-        new_config.bandwidth = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "coding_rate")) && cJSON_IsNumber(item)) {
-        new_config.coding_rate = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "tx_power")) && cJSON_IsNumber(item)) {
-        new_config.tx_power = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "sync_word")) && cJSON_IsNumber(item)) {
-        new_config.sync_word = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "ping_interval")) && cJSON_IsNumber(item)) {
-        new_config.ping_interval = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "beacon_interval")) && cJSON_IsNumber(item)) {
-        new_config.beacon_interval = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "route_timeout")) && cJSON_IsNumber(item)) {
-        new_config.route_timeout = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "max_hops")) && cJSON_IsNumber(item)) {
-        new_config.max_hops = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "enable_ack")) && cJSON_IsBool(item)) {
-        new_config.enable_ack = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "ack_timeout")) && cJSON_IsNumber(item)) {
-        new_config.ack_timeout = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "enable_self_healing")) && cJSON_IsBool(item)) {
-        new_config.enable_self_healing = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "healing_timeout")) && cJSON_IsNumber(item)) {
-        new_config.healing_timeout = item->valueint;
-    }
+    JSON_GET_BOOL("enable_ack", new_config.enable_ack);
+    JSON_GET_INT("ack_timeout", new_config.ack_timeout);
+    JSON_GET_BOOL("enable_self_healing", new_config.enable_self_healing);
+    JSON_GET_INT("healing_timeout", new_config.healing_timeout);
     
     if ((item = cJSON_GetObjectItem(root, "wifi_ssid")) && cJSON_IsString(item)) {
         strncpy(new_config.wifi_ssid, item->valuestring, sizeof(new_config.wifi_ssid) - 1);
         new_config.wifi_ssid[sizeof(new_config.wifi_ssid) - 1] = '\0';
     }
     
-    if ((item = cJSON_GetObjectItem(root, "enable_web_server")) && cJSON_IsBool(item)) {
-        new_config.enable_web_server = cJSON_IsTrue(item);
+    if ((item = cJSON_GetObjectItem(root, "wifi_password")) && cJSON_IsString(item)) {
+        strncpy(new_config.wifi_password, item->valuestring, sizeof(new_config.wifi_password) - 1);
+        new_config.wifi_password[sizeof(new_config.wifi_password) - 1] = '\0';
+    }
+
+    JSON_GET_BOOL("enable_web_server", new_config.enable_web_server);
+    JSON_GET_INT("web_port", new_config.web_port);
+    JSON_GET_BOOL("enable_encryption", new_config.enable_encryption);
+    JSON_GET_BOOL("enable_crc", new_config.enable_crc);
+    JSON_GET_BOOL("enable_ldro", new_config.enable_ldro);
+    JSON_GET_INT("preamble_length", new_config.preamble_length);
+    JSON_GET_INT("symbol_timeout", new_config.symbol_timeout);
+    
+    // Parse AES Key
+    if ((item = cJSON_GetObjectItem(root, "aes_key")) && cJSON_IsString(item)) {
+        if (strlen(item->valuestring) == 32) {
+            char buf[3] = {0};
+            for (int i = 0; i < 16; i++) {
+                buf[0] = item->valuestring[i*2];
+                buf[1] = item->valuestring[i*2+1];
+                new_config.aes_key[i] = (uint8_t)strtol(buf, NULL, 16);
+            }
+        }
     }
     
-    if ((item = cJSON_GetObjectItem(root, "web_port")) && cJSON_IsNumber(item)) {
-        new_config.web_port = item->valueint;
+    // Parse IV
+    if ((item = cJSON_GetObjectItem(root, "iv")) && cJSON_IsString(item)) {
+        if (strlen(item->valuestring) == 32) {
+            char buf[3] = {0};
+            for (int i = 0; i < 16; i++) {
+                buf[0] = item->valuestring[i*2];
+                buf[1] = item->valuestring[i*2+1];
+                new_config.iv[i] = (uint8_t)strtol(buf, NULL, 16);
+            }
+        }
     }
-    
-    if ((item = cJSON_GetObjectItem(root, "enable_encryption")) && cJSON_IsBool(item)) {
-        new_config.enable_encryption = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "enable_crc")) && cJSON_IsBool(item)) {
-        new_config.enable_crc = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "enable_ldro")) && cJSON_IsBool(item)) {
-        new_config.enable_ldro = cJSON_IsTrue(item);
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "preamble_length")) && cJSON_IsNumber(item)) {
-        new_config.preamble_length = item->valueint;
-    }
-    
-    if ((item = cJSON_GetObjectItem(root, "symbol_timeout")) && cJSON_IsNumber(item)) {
-        new_config.symbol_timeout = item->valueint;
-    }
-    
+
     cJSON_Delete(root);
     
     // Save to NVS
@@ -569,17 +546,7 @@ static esp_err_t post_config_direct_handler(httpd_req_t *req) {
     esp_err_t err = config_load(&new_config);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Could not load existing config, using defaults");
-        // Set reasonable defaults
-        memset(&new_config, 0, sizeof(lora_config_t));
-        strcpy(new_config.node_name, "LoRa-Node");
-        new_config.frequency = 868.0;
-        new_config.spread_factor = 7;
-        new_config.bandwidth = 125;
-        new_config.coding_rate = 5;
-        new_config.tx_power = 17;
-        new_config.ping_interval = 60;
-        new_config.beacon_interval = 30;
-        new_config.web_port = 80;
+        config_load_defaults(&new_config);
     }
     
     // Update with new values from JSON
@@ -704,6 +671,25 @@ static esp_err_t post_config_direct_handler(httpd_req_t *req) {
     
     return send_json_response(req, true, "Configuration saved successfully", response_data);
 }
+
+// POST /api/config/reset - Reset to defaults
+static esp_err_t post_config_reset_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "POST /api/config/reset - Resetting to defaults");
+    
+    // Create default config using shared manager
+    lora_config_t default_config;
+    config_load_defaults(&default_config);
+    
+    // Save to NVS
+    esp_err_t err = config_save(&default_config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to save default config: %s", esp_err_to_name(err));
+        return send_json_response(req, false, "Failed to reset configuration", NULL);
+    }
+    
+    ESP_LOGI(TAG, "Configuration reset to defaults");
+    return send_json_response(req, true, "Configuration reset to defaults", NULL);
+}
 static const httpd_uri_t post_config_direct_uri = {
     .uri       = "/config",
     .method    = HTTP_POST,
@@ -733,6 +719,13 @@ static const httpd_uri_t dashboard_uri = {
 
 static const httpd_uri_t dashboard_html_uri = {
     .uri       = "/dashboard.html",
+    .method    = HTTP_GET,
+    .handler   = dashboard_html_handler,
+    .user_ctx  = NULL
+};
+
+static const httpd_uri_t index_html_uri = {
+    .uri       = "/index.html",
     .method    = HTTP_GET,
     .handler   = dashboard_html_handler,
     .user_ctx  = NULL
@@ -814,6 +807,13 @@ static const httpd_uri_t post_config_uri = {
     .user_ctx  = NULL
 };
 
+static const httpd_uri_t post_config_reset_uri = {
+    .uri       = "/api/config/reset",
+    .method    = HTTP_POST,
+    .handler   = post_config_reset_handler,
+    .user_ctx  = NULL
+};
+
 
 
 // Start web server
@@ -855,6 +855,7 @@ httpd_handle_t web_server_start(void) {
     // Register all URI handlers
     httpd_register_uri_handler(server, &dashboard_uri);
     httpd_register_uri_handler(server, &dashboard_html_uri);
+    httpd_register_uri_handler(server, &index_html_uri);
     httpd_register_uri_handler(server, &get_config_uri);
     httpd_register_uri_handler(server, &lora_config_uri);    
     httpd_register_uri_handler(server, &devices_uri);
@@ -870,6 +871,7 @@ httpd_handle_t web_server_start(void) {
     httpd_register_uri_handler(server, &devices_api_uri);
     httpd_register_uri_handler(server, &get_config_api_uri);
     httpd_register_uri_handler(server, &post_config_direct_uri);
+    httpd_register_uri_handler(server, &post_config_reset_uri);
 
     ESP_LOGI(TAG, "Web server started successfully on port %d", config.server_port);
     ESP_LOGI(TAG, "Dashboard: http://192.168.4.1");
